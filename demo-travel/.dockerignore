@@ -1,0 +1,25 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+build/
+
+# IDE
+.idea/
+.vscode/
+
+# Git
+.git/
+.gitignore
+
+# Docker (avoid recursive)
+Dockerfile
+
+# Misc
+*.md
+.env*
+!.env.example
+coverage/
+.DS_Store
+*.log

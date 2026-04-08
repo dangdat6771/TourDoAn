@@ -1,0 +1,7 @@
+{
+  "name": "28.TRAVEL - Đặt Tour Du Lịch Trực Tuyến",
+  "description": "Hệ thống đặt tour du lịch chuyên nghiệp với các tour trong nước và quốc tế hấp dẫn.",
+  "requestFramePermissions": [
+    "geolocation"
+  ]
+}
