@@ -1,10 +1,10 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
-import { ChevronRight, LayoutGrid, List, ArrowUpDown } from 'lucide-react';
+import { ChevronRight, LayoutGrid, List, ArrowUpDown, ChevronLeft, ChevronRight as ChevronNext } from 'lucide-react';
 import FilterSidebar, { type TourListFilters } from '../components/tour/FilterSidebar';
 import TourCard from '../components/tour/TourCard';
 import type { Tour } from '../types';
-import { fetchPublicTours } from '../services/travelApi';
+import { fetchPublicToursPage } from '../services/travelApi';
 
 const regionNames: Record<string, string> = {
   'mien-bac': 'Mien Bac',
@@ -40,6 +40,7 @@ const parseFiltersFromSearch = (search: string): TourListFilters => {
 };
 
 const parseSortFromSearch = (search: string) => new URLSearchParams(search).get('sort') || 'newest';
+const parsePageFromSearch = (search: string) => Math.max(Number(new URLSearchParams(search).get('page') || 1), 1);
 
 const TourList = () => {
   const location = useLocation();
@@ -52,7 +53,11 @@ const TourList = () => {
   const [error, setError] = useState('');
   const [filters, setFilters] = useState<TourListFilters>(() => parseFiltersFromSearch(location.search));
   const [sort, setSort] = useState(() => parseSortFromSearch(location.search));
+  const [currentPage, setCurrentPage] = useState(() => parsePageFromSearch(location.search));
+  const [totalPages, setTotalPages] = useState(0);
+  const [totalElements, setTotalElements] = useState(0);
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
+  const pageSize = 9;
 
   const baseTitle = isDomestic ? 'Tour Trong Nuoc' : 'Tour Nuoc Ngoai';
   const regionTitle = regionSlug ? regionNames[regionSlug] ?? regionSlug : null;
@@ -61,6 +66,7 @@ const TourList = () => {
   useEffect(() => {
     setFilters(parseFiltersFromSearch(location.search));
     setSort(parseSortFromSearch(location.search));
+    setCurrentPage(parsePageFromSearch(location.search));
   }, [location.search]);
 
   useEffect(() => {
@@ -73,6 +79,8 @@ const TourList = () => {
       try {
         const params: Record<string, unknown> = {
           sort,
+          page: regionSlug ? currentPage - 1 : 0,
+          pageSize: regionSlug ? pageSize : 100,
         };
 
         if (regionSlug) {
@@ -108,17 +116,29 @@ const TourList = () => {
           params.minPrice = 20000000;
         }
 
-        const data = await fetchPublicTours(params);
+        const result = await fetchPublicToursPage(params);
         const filtered = regionSlug
-          ? data
-          : data.filter((tour) => (isDomestic ? tour.category === 'domestic' : tour.category === 'international'));
+          ? result.items
+          : result.items.filter((tour) => (isDomestic ? tour.category === 'domestic' : tour.category === 'international'));
 
         if (active) {
-          setTours(filtered);
+          if (regionSlug) {
+            setTours(filtered);
+            setTotalPages(result.totalPages);
+            setTotalElements(result.totalElements);
+          } else {
+            const startIndex = (currentPage - 1) * pageSize;
+            const paginatedItems = filtered.slice(startIndex, startIndex + pageSize);
+            setTours(paginatedItems);
+            setTotalElements(filtered.length);
+            setTotalPages(Math.max(Math.ceil(filtered.length / pageSize), 1));
+          }
         }
       } catch {
         if (active) {
           setError('Khong the tai danh sach tour.');
+          setTotalPages(0);
+          setTotalElements(0);
         }
       } finally {
         if (active) {
@@ -131,9 +151,9 @@ const TourList = () => {
     return () => {
       active = false;
     };
-  }, [filters, sort, isDomestic, regionSlug]);
+  }, [currentPage, filters, sort, isDomestic, regionSlug]);
 
-  const countLabel = tours.length;
+  const countLabel = totalElements || tours.length;
 
   const departureOptions = useMemo(
     () =>
@@ -151,7 +171,7 @@ const TourList = () => {
     [tours],
   );
 
-  const syncQuery = (nextFilters: TourListFilters, nextSort: string) => {
+  const syncQuery = (nextFilters: TourListFilters, nextSort: string, nextPage = 1) => {
     const params = new URLSearchParams();
 
     if (nextFilters.departure) params.set('departure', nextFilters.departure);
@@ -162,6 +182,7 @@ const TourList = () => {
     if (nextFilters.infantCount > 0) params.set('infantCount', String(nextFilters.infantCount));
     if (nextFilters.priceRange !== 'all') params.set('priceRange', nextFilters.priceRange);
     if (nextSort !== 'newest') params.set('sort', nextSort);
+    if (nextPage > 1) params.set('page', String(nextPage));
 
     navigate({
       pathname: location.pathname,
@@ -170,12 +191,17 @@ const TourList = () => {
   };
 
   const handleApplyFilters = () => {
-    syncQuery(filters, sort);
+    syncQuery(filters, sort, 1);
   };
 
   const handleSortChange = (value: string) => {
     setSort(value);
-    syncQuery(filters, value);
+    syncQuery(filters, value, 1);
+  };
+
+  const handlePageChange = (page: number) => {
+    setCurrentPage(page);
+    syncQuery(filters, sort, page);
   };
 
   return (
@@ -264,17 +290,47 @@ const TourList = () => {
                 Chua co tour phu hop voi bo loc hien tai.
               </div>
             ) : (
-              <div
-                className={
-                  viewMode === 'grid'
-                    ? 'grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 mb-12'
-                    : 'grid grid-cols-1 gap-6 mb-12'
-                }
-              >
-                {tours.map((tour) => (
-                  <TourCard key={tour.id} tour={tour} />
-                ))}
-              </div>
+              <>
+                <div
+                  className={
+                    viewMode === 'grid'
+                      ? 'grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 mb-8'
+                      : 'grid grid-cols-1 gap-6 mb-8'
+                  }
+                >
+                  {tours.map((tour) => (
+                    <TourCard key={tour.id} tour={tour} />
+                  ))}
+                </div>
+
+                {totalPages > 1 && (
+                  <div className="flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-gray-100 bg-white px-5 py-4 shadow-sm">
+                    <p className="text-sm text-gray-500">
+                      Trang <span className="font-bold text-gray-900">{currentPage}</span> / {totalPages}
+                    </p>
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => handlePageChange(currentPage - 1)}
+                        disabled={currentPage <= 1}
+                        className="inline-flex items-center gap-2 rounded-xl border border-gray-200 px-4 py-2 text-sm font-semibold text-gray-700 transition hover:border-primary hover:text-primary disabled:cursor-not-allowed disabled:opacity-50"
+                      >
+                        <ChevronLeft size={16} />
+                        Truoc
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handlePageChange(currentPage + 1)}
+                        disabled={currentPage >= totalPages}
+                        className="inline-flex items-center gap-2 rounded-xl border border-gray-200 px-4 py-2 text-sm font-semibold text-gray-700 transition hover:border-primary hover:text-primary disabled:cursor-not-allowed disabled:opacity-50"
+                      >
+                        Sau
+                        <ChevronNext size={16} />
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </>
             )}
           </div>
         </div>

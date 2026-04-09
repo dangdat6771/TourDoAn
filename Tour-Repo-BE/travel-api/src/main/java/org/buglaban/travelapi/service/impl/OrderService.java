@@ -5,6 +5,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.buglaban.travelapi.dto.request.order.CreateOrderRequestDTO;
 import org.buglaban.travelapi.dto.request.order.OrderCustomerRequestDTO;
 import org.buglaban.travelapi.dto.request.order.OrderItemRequestDTO;
+import org.buglaban.travelapi.dto.response.PagedResponse;
 import org.buglaban.travelapi.dto.response.order.OrderItemResponseDTO;
 import org.buglaban.travelapi.dto.response.order.OrderResponseDTO;
 import org.buglaban.travelapi.exception.DataNotFoundException;
@@ -25,6 +26,7 @@ import org.buglaban.travelapi.util.PaymentStatus;
 import org.buglaban.travelapi.util.ScheduleStatus;
 import org.buglaban.travelapi.util.UserStatus;
 import org.buglaban.travelapi.util.UserType;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
@@ -34,6 +36,7 @@ import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Set;
 import java.util.UUID;
 
@@ -63,8 +66,8 @@ public class OrderService implements IOrderService {
     }
 
     @Override
-    public Long createOrder(CreateOrderRequestDTO requestDTO) {
-        User customer = upsertCustomer(requestDTO.getCustomer());
+    public Long createOrder(CreateOrderRequestDTO requestDTO, Long userId, String email) {
+        User customer = resolveCustomerForOrder(requestDTO.getCustomer(), userId, email);
 
         Order order = Order.builder()
                 .orderCode(generateOrderCode())
@@ -93,13 +96,12 @@ public class OrderService implements IOrderService {
                 throw new DataNotFoundException("Selected schedule does not belong to this tour");
             }
 
-            int totalParticipants = safeInteger(item.getAdultQuantity())
-                    + safeInteger(item.getChildQuantity())
-                    + safeInteger(item.getInfantQuantity());
+            int occupiedSeats = safeInteger(item.getAdultQuantity())
+                    + safeInteger(item.getChildQuantity());
 
             int bookedSeats = safeInteger(schedule.getBookedSeats());
             int availableSlots = Math.max(0, safeInteger(schedule.getAvailableSeats()) - bookedSeats);
-            if (availableSlots < totalParticipants) {
+            if (availableSlots < occupiedSeats) {
                 throw new DataNotFoundException("Not enough available seats for tour: " + tour.getTourName());
             }
 
@@ -123,7 +125,7 @@ public class OrderService implements IOrderService {
             totalAmount = totalAmount.add(defaultAmount(detail.getSubtotal()));
             orderDetails.add(detail);
 
-            int updatedBookedSeats = bookedSeats + totalParticipants;
+            int updatedBookedSeats = bookedSeats + occupiedSeats;
             schedule.setBookedSeats(updatedBookedSeats);
             if (updatedBookedSeats >= safeInteger(schedule.getAvailableSeats())) {
                 schedule.setStatus(ScheduleStatus.FULL);
@@ -172,7 +174,7 @@ public class OrderService implements IOrderService {
                     continue;
                 }
 
-                int updatedBookedSeats = Math.max(0, safeInteger(schedule.getBookedSeats()) - detail.getTotalParticipants());
+                int updatedBookedSeats = Math.max(0, safeInteger(schedule.getBookedSeats()) - detail.getOccupiedSeats());
                 schedule.setBookedSeats(updatedBookedSeats);
                 if (updatedBookedSeats < safeInteger(schedule.getAvailableSeats()) && schedule.getStatus() == ScheduleStatus.FULL) {
                     schedule.setStatus(ScheduleStatus.AVAILABLE);
@@ -203,6 +205,67 @@ public class OrderService implements IOrderService {
         orderRepository.save(order);
     }
 
+    @Override
+    @Transactional(readOnly = true)
+    public PagedResponse<List<OrderResponseDTO>> getMyOrders(Long userId, String email, int page, int pageSize) {
+        User user = resolveCurrentUser(userId, email);
+        Page<OrderResponseDTO> orders = orderRepository
+                .findByUserIdOrderByCreatedAtDesc(user.getId(), PageRequest.of(page, pageSize))
+                .map(this::toOrderResponseDTO);
+
+        return PagedResponse.<List<OrderResponseDTO>>builder()
+                .page(orders.getNumber())
+                .pageSize(orders.getSize())
+                .totalPage(orders.getTotalPages())
+                .totalElements(orders.getTotalElements())
+                .items(orders.getContent())
+                .build();
+    }
+
+    @Override
+    public void cancelOrder(Long orderId, Long userId, String email) {
+        User user = resolveCurrentUser(userId, email);
+        Order order = orderRepository.findByIdAndUserId(orderId, user.getId())
+                .orElseThrow(() -> new DataNotFoundException("Order not found: " + orderId));
+
+        if (order.getOrderStatus() == OrderStatus.COMPLETED) {
+            throw new DataNotFoundException("Completed orders cannot be cancelled");
+        }
+
+        if (order.getOrderStatus() == OrderStatus.CANCELLED) {
+            return;
+        }
+
+        if (order.getOrderDetails() != null) {
+            for (OrderDetail detail : order.getOrderDetails()) {
+                TourSchedule schedule = detail.getTourSchedule();
+                if (schedule == null) {
+                    continue;
+                }
+
+                int updatedBookedSeats = Math.max(0, safeInteger(schedule.getBookedSeats()) - detail.getOccupiedSeats());
+                schedule.setBookedSeats(updatedBookedSeats);
+                if (updatedBookedSeats < safeInteger(schedule.getAvailableSeats())) {
+                    schedule.setStatus(ScheduleStatus.AVAILABLE);
+                }
+                scheduleRepository.save(schedule);
+            }
+        }
+
+        order.setOrderStatus(OrderStatus.CANCELLED);
+        if (order.getPaymentStatus() == PaymentStatus.PAID) {
+            order.setPaymentStatus(PaymentStatus.REFUNDED);
+        } else {
+            order.setPaymentStatus(PaymentStatus.CANCELLED);
+            order.setPaymentDate(null);
+        }
+
+        String baseNote = order.getAdminNote() == null ? "" : order.getAdminNote().trim();
+        String cancellationNote = "Cancelled by customer";
+        order.setAdminNote(baseNote.isBlank() ? cancellationNote : baseNote + " | " + cancellationNote);
+        orderRepository.save(order);
+    }
+
     private User upsertCustomer(OrderCustomerRequestDTO customerRequest) {
         User user = userRepository.findByEmail(customerRequest.getEmail())
                 .orElseGet(() -> User.builder()
@@ -230,9 +293,54 @@ public class OrderService implements IOrderService {
         return userRepository.save(user);
     }
 
+    private User resolveCustomerForOrder(OrderCustomerRequestDTO customerRequest, Long userId, String email) {
+        if (userId == null && (email == null || email.isBlank())) {
+            return upsertCustomer(customerRequest);
+        }
+
+        User user = resolveCurrentUser(userId, email);
+        user.setFullName(customerRequest.getFullName());
+        user.setPhone(customerRequest.getPhone());
+        user.setAddress(customerRequest.getAddress());
+        if (user.getStatus() == null) {
+            user.setStatus(UserStatus.ACTIVE);
+        }
+        if (user.getRole() == null) {
+            user.setRole(getDefaultUserRole());
+        }
+        return userRepository.save(user);
+    }
+
     private Role getDefaultUserRole() {
         return roleRepository.findByRoleName(UserType.USER)
                 .orElseThrow(() -> new DataNotFoundException("Role USER not found"));
+    }
+
+    private User resolveCurrentUser(Long userId, String email) {
+        String normalizedEmail = email == null ? null : email.trim().toLowerCase(Locale.ROOT);
+
+        if (userId != null && normalizedEmail != null && !normalizedEmail.isBlank()) {
+            User user = userRepository.findById(userId)
+                    .orElseThrow(() -> new DataNotFoundException("User not found: " + userId));
+
+            String userEmail = user.getEmail() == null ? "" : user.getEmail().trim().toLowerCase(Locale.ROOT);
+            if (!userEmail.equals(normalizedEmail)) {
+                throw new DataNotFoundException("Current user information does not match");
+            }
+            return user;
+        }
+
+        if (userId != null) {
+            return userRepository.findById(userId)
+                    .orElseThrow(() -> new DataNotFoundException("User not found: " + userId));
+        }
+
+        if (normalizedEmail != null && !normalizedEmail.isBlank()) {
+            return userRepository.findByEmail(normalizedEmail)
+                    .orElseThrow(() -> new DataNotFoundException("User not found with email: " + email));
+        }
+
+        throw new DataNotFoundException("Missing current user information");
     }
 
     private String generateOrderCode() {

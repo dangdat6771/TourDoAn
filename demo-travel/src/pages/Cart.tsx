@@ -1,11 +1,12 @@
-import React, { useState } from 'react';
-import { Link } from 'react-router-dom';
+import React, { useEffect, useState } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
 import { Trash2, Plus, Minus, ArrowLeft, CreditCard, Wallet, Banknote } from 'lucide-react';
 import { useCartStore } from '../store/useCartStore';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
-import { createCheckoutOrder } from '../services/travelApi';
+import { createCheckoutOrder, getApiErrorMessage } from '../services/travelApi';
+import { useUserStore } from '../store/useUserStore';
 
 const checkoutSchema = z.object({
   fullName: z.string().min(2, 'Ho ten phai it nhat 2 ky tu'),
@@ -19,7 +20,11 @@ const checkoutSchema = z.object({
 type CheckoutFormData = z.infer<typeof checkoutSchema>;
 
 const Cart = () => {
+  const navigate = useNavigate();
   const { items, removeItem, updateQuantity, totalPrice, clearCart } = useCartStore();
+  const user = useUserStore((state) => state.user);
+  const isAuthenticated = useUserStore((state) => state.isAuthenticated);
+  const setRedirectAfterLogin = useUserStore((state) => state.setRedirectAfterLogin);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submissionError, setSubmissionError] = useState('');
   const [lastOrderId, setLastOrderId] = useState<string | null>(null);
@@ -27,47 +32,78 @@ const Cart = () => {
   const {
     register,
     handleSubmit,
+    getValues,
+    reset,
     formState: { errors },
   } = useForm<CheckoutFormData>({
     resolver: zodResolver(checkoutSchema),
     defaultValues: {
+      fullName: '',
+      phone: '',
+      email: '',
+      address: '',
       paymentMethod: 'bank',
+      note: '',
     },
   });
 
+  useEffect(() => {
+    const currentValues = getValues();
+    reset({
+      ...currentValues,
+      fullName: user?.name || currentValues.fullName || '',
+      email: user?.email || currentValues.email || '',
+      phone: user?.phone || currentValues.phone || '',
+      address: user?.address || currentValues.address || '',
+    });
+  }, [getValues, reset, user]);
+
   const onSubmit = async (data: CheckoutFormData) => {
+    if (!isAuthenticated || !user) {
+      setRedirectAfterLogin('/cart');
+      navigate('/tai-khoan');
+      return;
+    }
+
     setIsSubmitting(true);
     setSubmissionError('');
 
     try {
-      const orderId = await createCheckoutOrder({
-        customer: {
-          fullName: data.fullName,
-          phone: data.phone,
-          email: data.email,
-          address: data.address,
-          note: data.note,
-        },
-        paymentMethod: data.paymentMethod,
-        items: items.map((item) => {
-          if (!item.selectedScheduleId) {
-            throw new Error(`Tour ${item.title} chua co lich khoi hanh.`);
-          }
+      if (items.length === 0) {
+        throw new Error('Gio hang hien dang trong.');
+      }
 
-          return {
-            tourId: Number(item.id),
-            scheduleId: Number(item.selectedScheduleId),
-            adultQuantity: item.quantity.adults,
-            childQuantity: item.quantity.children,
-            infantQuantity: item.quantity.infants,
-          };
-        }),
-      });
+      const orderId = await createCheckoutOrder(
+        {
+          customer: {
+            fullName: data.fullName,
+            phone: data.phone,
+            email: data.email,
+            address: data.address,
+            note: data.note,
+          },
+          paymentMethod: data.paymentMethod,
+          items: items.map((item) => {
+            if (!item.selectedScheduleId) {
+              throw new Error(`Tour ${item.title} chua co lich khoi hanh.`);
+            }
+
+            return {
+              tourId: Number(item.id),
+              scheduleId: Number(item.selectedScheduleId),
+              adultQuantity: item.quantity.adults,
+              childQuantity: item.quantity.children,
+              infantQuantity: item.quantity.infants,
+            };
+          }),
+        },
+        user,
+      );
 
       setLastOrderId(String(orderId));
       clearCart();
     } catch (error) {
-      setSubmissionError(error instanceof Error ? error.message : 'Khong the dat tour luc nay.');
+      setSubmissionError(getApiErrorMessage(error, 'Khong the dat tour luc nay.'));
     } finally {
       setIsSubmitting(false);
     }
@@ -91,6 +127,11 @@ const Cart = () => {
           <Link to="/" className="bg-primary text-white px-8 py-3 rounded-full font-bold hover:bg-opacity-90 transition-all">
             Quay lai Trang Chu
           </Link>
+          {lastOrderId && (
+            <Link to="/don-hang-cua-toi" className="border border-primary text-primary px-8 py-3 rounded-full font-bold hover:bg-primary/5 transition-all">
+              Xem don hang cua toi
+            </Link>
+          )}
         </div>
       </div>
     );
@@ -105,6 +146,12 @@ const Cart = () => {
             Quay lai mua hang
           </Link>
         </div>
+
+        {!isAuthenticated && (
+          <div className="mb-8 rounded-3xl border border-amber-200 bg-amber-50 px-6 py-4 text-sm text-amber-700">
+            Ban can dang nhap tai khoan user truoc khi gui don dat tour. Sau khi dang nhap, he thong se quay lai gio hang de ban tiep tuc thanh toan.
+          </div>
+        )}
 
         <div className="flex flex-col lg:flex-row gap-8">
           <div className="w-full lg:w-2/3 flex flex-col gap-8">
@@ -180,8 +227,14 @@ const Cart = () => {
                   </div>
                   <div className="flex flex-col gap-2">
                     <label className="text-sm font-bold text-gray-700">Email *</label>
-                    <input {...register('email')} className="bg-gray-50 border border-gray-200 rounded-xl p-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20" placeholder="Nhap email..." />
+                    <input
+                      {...register('email')}
+                      readOnly={isAuthenticated}
+                      className={`border border-gray-200 rounded-xl p-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 ${isAuthenticated ? 'bg-gray-100 text-gray-500' : 'bg-gray-50'}`}
+                      placeholder="Nhap email..."
+                    />
                     {errors.email && <span className="text-xs text-red-500">{errors.email.message}</span>}
+                    {isAuthenticated && <span className="text-[11px] text-gray-400">Email dang su dung theo tai khoan da dang nhap.</span>}
                   </div>
                   <div className="flex flex-col gap-2">
                     <label className="text-sm font-bold text-gray-700">Dia chi *</label>
@@ -239,12 +292,20 @@ const Cart = () => {
                 </div>
 
                 <button
-                  type="submit"
-                  form="checkout-form"
+                  type={isAuthenticated ? 'submit' : 'button'}
+                  form={isAuthenticated ? 'checkout-form' : undefined}
+                  onClick={
+                    isAuthenticated
+                      ? undefined
+                      : () => {
+                          setRedirectAfterLogin('/cart');
+                          navigate('/tai-khoan');
+                        }
+                  }
                   disabled={isSubmitting}
                   className="w-full bg-secondary text-white py-4 rounded-xl font-bold hover:bg-opacity-90 transition-all shadow-lg text-lg uppercase tracking-wider disabled:opacity-70"
                 >
-                  {isSubmitting ? 'Dang gui don...' : 'Dat Tour Ngay'}
+                  {isSubmitting ? 'Dang gui don...' : isAuthenticated ? 'Dat Tour Ngay' : 'Dang nhap de dat tour'}
                 </button>
               </div>
             </div>

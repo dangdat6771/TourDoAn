@@ -118,6 +118,7 @@ const TourDetail = () => {
     () => tour?.schedules?.find((schedule) => schedule.id === selectedScheduleId),
     [selectedScheduleId, tour],
   );
+  const itineraryFallbackNote = selectedSchedule?.note || tour?.schedules?.find((schedule) => schedule.note)?.note || '';
 
   const handleQuantityChange = (type: keyof typeof quantities, delta: number) => {
     setMessage('');
@@ -208,11 +209,49 @@ const TourDetail = () => {
             </div>
 
             <div className="bg-white p-8 rounded-3xl shadow-sm border border-gray-100">
+              <h2 className="text-2xl font-bold text-primary mb-6">Lich Khoi Hanh</h2>
+              <div className="grid gap-4 md:grid-cols-2">
+                {(tour.schedules ?? []).length === 0 ? (
+                  <div className="rounded-2xl border border-dashed border-gray-200 px-6 py-8 text-center text-sm text-gray-500 md:col-span-2">
+                    Tour nay chua co lich khoi hanh de dat cho.
+                  </div>
+                ) : (
+                  (tour.schedules ?? []).map((schedule) => (
+                    <button
+                      key={schedule.id}
+                      type="button"
+                      onClick={() => {
+                        setSelectedScheduleId(schedule.id);
+                        setMessage('');
+                      }}
+                      className={`rounded-2xl border p-5 text-left transition ${
+                        selectedScheduleId === schedule.id
+                          ? 'border-primary bg-primary/5 shadow-sm'
+                          : 'border-gray-200 bg-gray-50 hover:border-primary/40'
+                      }`}
+                    >
+                      <p className="text-xs font-bold uppercase tracking-[0.2em] text-primary">{schedule.status}</p>
+                      <h3 className="mt-2 text-lg font-bold text-gray-900">{schedule.departureDate}</h3>
+                      <p className="mt-1 text-sm text-gray-500">Ve ngay {schedule.returnDate}</p>
+                      <p className="mt-3 text-sm text-gray-600">Con {schedule.availableSlots} cho trong dot nay.</p>
+                      {schedule.note && <p className="mt-3 text-sm leading-6 text-gray-500">{schedule.note}</p>}
+                    </button>
+                  ))
+                )}
+              </div>
+            </div>
+
+            <div className="bg-white p-8 rounded-3xl shadow-sm border border-gray-100">
               <h2 className="text-2xl font-bold text-primary mb-8">Lich Trinh Tour</h2>
               <div className="flex flex-col gap-6">
                 {(tour.itinerary ?? []).length === 0 ? (
                   <div className="rounded-2xl border border-dashed border-gray-200 px-6 py-8 text-center text-sm text-gray-500">
-                    Tour nay chua co lich trinh chi tiet.
+                    <p>Tour nay chua co lich trinh chi tiet theo tung ngay tu backend.</p>
+                    {itineraryFallbackNote && (
+                      <p className="mt-3 rounded-2xl bg-gray-50 px-4 py-3 text-left leading-6 text-gray-600">
+                        Ghi chu dot khoi hanh dang chon: {itineraryFallbackNote}
+                      </p>
+                    )}
                   </div>
                 ) : (
                   (tour.itinerary ?? []).map((item) => (

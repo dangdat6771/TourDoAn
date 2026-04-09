@@ -44,10 +44,31 @@ public class OrderController {
         }
     }
 
-    @PostMapping("")
-    public ResponseData<?> createOrder(@Valid @RequestBody CreateOrderRequestDTO requestDTO) {
+    @GetMapping("my-orders")
+    public ResponseData<?> getMyOrders(
+            @RequestHeader(value = "X-User-Id", required = false) Long userId,
+            @RequestHeader(value = "X-User-Email", required = false) String email,
+            @RequestParam(value = "page", defaultValue = "0") int page,
+            @RequestParam(value = "size", defaultValue = "10") int size) {
         try {
-            Long id = orderService.createOrder(requestDTO);
+            return new ResponseData<>(
+                    HttpStatus.OK.value(),
+                    "Lấy danh sách đơn hàng thành công",
+                    orderService.getMyOrders(userId, email, page, size)
+            );
+        } catch (Exception e) {
+            log.error("errorMessage = {}", e.getMessage(), e.getCause());
+            return new ResponseFailure(HttpStatus.BAD_REQUEST.value(), "Get my orders fail");
+        }
+    }
+
+    @PostMapping("")
+    public ResponseData<?> createOrder(
+            @Valid @RequestBody CreateOrderRequestDTO requestDTO,
+            @RequestHeader(value = "X-User-Id", required = false) Long userId,
+            @RequestHeader(value = "X-User-Email", required = false) String email) {
+        try {
+            Long id = orderService.createOrder(requestDTO, userId, email);
             return new ResponseData<>(HttpStatus.CREATED.value(), "Order created successfully", id);
         } catch (Exception e) {
             log.error("errorMessage = {}", e.getMessage(), e.getCause());
@@ -63,6 +84,20 @@ public class OrderController {
         } catch (Exception e) {
             log.error("errorMessage = {}", e.getMessage(), e.getCause());
             return new ResponseFailure(HttpStatus.BAD_REQUEST.value(), "Update order fail");
+        }
+    }
+
+    @PutMapping("{id}/cancel")
+    public ResponseData<?> cancelOrder(
+            @PathVariable Long id,
+            @RequestHeader(value = "X-User-Id", required = false) Long userId,
+            @RequestHeader(value = "X-User-Email", required = false) String email) {
+        try {
+            orderService.cancelOrder(id, userId, email);
+            return new ResponseData<>(HttpStatus.OK.value(), "Hủy đơn hàng thành công");
+        } catch (Exception e) {
+            log.error("errorMessage = {}", e.getMessage(), e.getCause());
+            return new ResponseFailure(HttpStatus.BAD_REQUEST.value(), "Cancel order fail");
         }
     }
 

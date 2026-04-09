@@ -1,3 +1,4 @@
+import axios from 'axios';
 import { apiClient } from './api';
 import type { News, Tour, TourSchedule } from '../types';
 import type { AdminUser } from '../admin/types';
@@ -16,11 +17,27 @@ type SpringPage<T> = {
   size?: number;
 };
 
+export type PaginatedResult<T> = {
+  items: T[];
+  page: number;
+  pageSize: number;
+  totalPages: number;
+  totalElements: number;
+};
+
 type LegacyPage<T> = {
   page?: number;
   pageSize?: number;
   totalPage?: number;
   item?: T;
+};
+
+type BackendPaged<T> = {
+  page?: number;
+  pageSize?: number;
+  totalPage?: number;
+  totalElements?: number;
+  items?: T[];
 };
 
 type PublicTourApi = {
@@ -52,8 +69,8 @@ type TourDayApi = {
 
 type TourScheduleApi = {
   id?: number;
-  departureDate?: string;
-  returnDate?: string;
+  departureDate?: string | number[];
+  returnDate?: string | number[];
   availableSeats?: number;
   bookedSeats?: number;
   availableSlots?: number;
@@ -126,6 +143,7 @@ type PriceQuoteApi = {
   subtotal?: number;
   finalAmount?: number;
   availableSlots?: number;
+  available?: boolean;
   isAvailable?: boolean;
 };
 
@@ -331,6 +349,23 @@ export type AdminUserUpdatePayload = {
   userType: 'ADMIN' | 'USER' | 'STAFF';
 };
 
+export type UserSession = {
+  id: string;
+  name: string;
+  email: string;
+  avatar?: string;
+  phone?: string;
+  address?: string;
+};
+
+const buildCurrentUserHeaders = (user?: UserSession | null) =>
+  user
+    ? {
+        'X-User-Id': user.id,
+        'X-User-Email': user.email,
+      }
+    : undefined;
+
 const FALLBACK_IMAGE = 'https://picsum.photos/seed/tour-fallback/800/600';
 const FALLBACK_AVATAR = 'https://picsum.photos/seed/user-fallback/120/120';
 
@@ -354,6 +389,21 @@ const unwrap = async <T>(promise: Promise<{ data: ApiResponse<T> }>) => {
   return response.data.data;
 };
 
+export const getApiErrorMessage = (error: unknown, fallback: string) => {
+  if (axios.isAxiosError(error)) {
+    const message = error.response?.data?.message;
+    if (typeof message === 'string' && message.trim()) {
+      return message;
+    }
+  }
+
+  if (error instanceof Error && error.message.trim()) {
+    return error.message;
+  }
+
+  return fallback;
+};
+
 const parseNumber = (value?: number | string | null) => {
   if (value === null || value === undefined || value === '') {
     return 0;
@@ -361,6 +411,23 @@ const parseNumber = (value?: number | string | null) => {
 
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : 0;
+};
+
+const toDateValue = (value?: string | number[] | null) => {
+  if (!value) {
+    return null;
+  }
+
+  if (Array.isArray(value)) {
+    const [year, month, day, hour = 0, minute = 0, second = 0] = value;
+    if (!year || !month || !day) {
+      return null;
+    }
+    return new Date(year, month - 1, day, hour, minute, second);
+  }
+
+  const parsed = new Date(value);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
 };
 
 const formatDuration = (days?: number, nights?: number) => {
@@ -373,27 +440,27 @@ const formatDuration = (days?: number, nights?: number) => {
   return `${days ?? 0} Ngay`;
 };
 
-const formatDate = (value?: string) => {
+const formatDate = (value?: string | number[] | null) => {
   if (!value) {
     return 'Lien he';
   }
 
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) {
-    return value;
+  const date = toDateValue(value);
+  if (!date) {
+    return Array.isArray(value) ? value.join('-') : value;
   }
 
   return date.toLocaleDateString('vi-VN');
 };
 
-const formatDateTime = (value?: string) => {
+const formatDateTime = (value?: string | number[] | null) => {
   if (!value) {
     return 'Dang cap nhat';
   }
 
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) {
-    return value;
+  const date = toDateValue(value);
+  if (!date) {
+    return Array.isArray(value) ? value.join('-') : value;
   }
 
   return date.toLocaleString('vi-VN');
@@ -529,8 +596,8 @@ const mapSchedule = (schedule: TourScheduleApi): TourSchedule => ({
   id: String(schedule.id ?? ''),
   departureDate: formatDate(schedule.departureDate),
   returnDate: formatDate(schedule.returnDate),
-  rawDepartureDate: schedule.departureDate,
-  rawReturnDate: schedule.returnDate,
+  rawDepartureDate: Array.isArray(schedule.departureDate) ? schedule.departureDate.join('-') : schedule.departureDate,
+  rawReturnDate: Array.isArray(schedule.returnDate) ? schedule.returnDate.join('-') : schedule.returnDate,
   availableSeats: parseNumber(schedule.availableSeats),
   bookedSeats: parseNumber(schedule.bookedSeats),
   availableSlots: parseNumber(schedule.availableSlots ?? parseNumber(schedule.availableSeats) - parseNumber(schedule.bookedSeats)),
@@ -811,7 +878,7 @@ export const toAdminTourFormState = (tour: TourDetailApi, categoryId = ''): Admi
     })) ?? [{ day: 1, title: '', content: '' }],
 });
 
-export const fetchPublicTours = async (params?: Record<string, unknown>) => {
+export const fetchPublicToursPage = async (params?: Record<string, unknown>): Promise<PaginatedResult<Tour>> => {
   const page = await unwrap<SpringPage<PublicTourApi>>(
     apiClient.get('/tours', {
       params: {
@@ -823,7 +890,18 @@ export const fetchPublicTours = async (params?: Record<string, unknown>) => {
     }),
   );
 
-  return (page.content ?? []).map(mapSummaryToTour);
+  return {
+    items: (page.content ?? []).map(mapSummaryToTour),
+    page: parseNumber(page.number),
+    pageSize: parseNumber(page.size),
+    totalPages: parseNumber(page.totalPages),
+    totalElements: parseNumber(page.totalElements),
+  };
+};
+
+export const fetchPublicTours = async (params?: Record<string, unknown>) => {
+  const result = await fetchPublicToursPage(params);
+  return result.items;
 };
 
 export const fetchTourDetail = async (slug: string) => {
@@ -847,7 +925,7 @@ export const calculateTourPrice = async (payload: {
     subtotal: parseNumber(response.subtotal),
     finalAmount: parseNumber(response.finalAmount),
     availableSlots: parseNumber(response.availableSlots),
-    isAvailable: Boolean(response.isAvailable),
+    isAvailable: Boolean(response.isAvailable ?? response.available),
   };
 };
 
@@ -935,8 +1013,27 @@ export const loginAdmin = async (email: string, password: string): Promise<Admin
   };
 };
 
-export const createCheckoutOrder = async (payload: CheckoutPayload) =>
-  unwrap<number>(apiClient.post('/order/', payload));
+export const loginUser = async (email: string, password: string): Promise<UserSession> => {
+  const response = await unwrap<LoginResponseApi>(apiClient.post('/user/login', { email, password }));
+  return {
+    id: String(response.id),
+    name: response.fullName,
+    email: response.email,
+    avatar: response.avatarUrl,
+  };
+};
+
+export const registerUser = async (payload: { fullName: string; email: string; password: string }) =>
+  unwrap<number>(
+    apiClient.post('/user/register', {
+      fullName: payload.fullName,
+      email: payload.email,
+      passwordHash: payload.password,
+    }),
+  );
+
+export const createCheckoutOrder = async (payload: CheckoutPayload, user?: UserSession | null) =>
+  unwrap<number>(apiClient.post('/order/', payload, { headers: buildCurrentUserHeaders(user) }));
 
 export const fetchOrders = async () => {
   const page = await unwrap<SpringPage<OrderApi>>(
@@ -952,6 +1049,33 @@ export const fetchOrderDetail = async (id: string) => {
   const response = await unwrap<OrderApi>(apiClient.get(`/order/${id}`));
   return mapOrder(response);
 };
+
+export const fetchMyOrders = async (
+  user: UserSession,
+  params?: { page?: number; size?: number },
+): Promise<PaginatedResult<AdminOrder>> => {
+  const response = await unwrap<BackendPaged<OrderApi>>(
+    apiClient.get('/order/my-orders', {
+      params: {
+        page: 0,
+        size: 10,
+        ...params,
+      },
+      headers: buildCurrentUserHeaders(user),
+    }),
+  );
+
+  return {
+    items: (response.items ?? []).map(mapOrder),
+    page: parseNumber(response.page),
+    pageSize: parseNumber(response.pageSize),
+    totalPages: parseNumber(response.totalPage),
+    totalElements: parseNumber(response.totalElements),
+  };
+};
+
+export const cancelMyOrder = async (id: string, user: UserSession) =>
+  unwrap(apiClient.put(`/order/${id}/cancel`, null, { headers: buildCurrentUserHeaders(user) }));
 
 export const updateOrderStatusApi = async (id: string, status: AdminOrder['status']) =>
   unwrap(apiClient.patch(`/order/${id}/status`, null, { params: { status: status.toUpperCase() } }));
@@ -973,6 +1097,18 @@ export const fetchUsers = async () => {
 export const fetchUserDetail = async (id: string) => {
   const response = await unwrap<UserApi>(apiClient.get(`/user/${id}`));
   return mapAdminUser(response);
+};
+
+export const fetchUserProfile = async (id: string): Promise<UserSession> => {
+  const response = await unwrap<UserApi>(apiClient.get(`/user/${id}`));
+  return {
+    id: String(response.id),
+    name: response.fullName,
+    email: response.email,
+    avatar: response.avatarUrl || FALLBACK_AVATAR,
+    phone: response.phone || '',
+    address: response.address || '',
+  };
 };
 
 export const updateAdminUser = async (id: string, payload: AdminUserUpdatePayload) =>

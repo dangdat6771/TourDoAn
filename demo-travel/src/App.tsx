@@ -8,6 +8,8 @@ import Cart from './pages/Cart';
 import NewsPage from './pages/News';
 import NewsDetailPage from './pages/NewsDetail';
 import ContactPage from './pages/Contact';
+import AccountAuth from './pages/AccountAuth';
+import MyOrders from './pages/MyOrders';
 
 // Admin Pages
 import AdminLogin from './admin/pages/Login';
@@ -58,6 +60,8 @@ const AppContent = () => {
           <Route path="/tin-tuc" element={<NewsPage />} />
           <Route path="/tin-tuc/:slug" element={<NewsDetailPage />} />
           <Route path="/lien-he" element={<ContactPage />} />
+          <Route path="/tai-khoan" element={<AccountAuth />} />
+          <Route path="/don-hang-cua-toi" element={<MyOrders />} />
         </Routes>
       </div>
       <Footer />

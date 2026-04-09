@@ -32,9 +32,10 @@ apiClient.interceptors.response.use(
   (response) => response,
   (error) => {
     if (error.response?.status === 401) {
-      // Handle unauthorized
       localStorage.removeItem('token');
-      window.location.href = '/admin/login';
+      if (typeof window !== 'undefined' && window.location.pathname.startsWith('/admin')) {
+        window.location.href = '/admin/login';
+      }
     }
     return Promise.reject(error);
   }
