@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { ShoppingCart, Phone, Mail, MapPin, ChevronDown, Menu, X } from 'lucide-react';
+import { ShoppingCart, Phone, Mail, MapPin, ChevronDown, Menu, X, User, LogOut } from 'lucide-react';
 import { useCartStore } from '../../store/useCartStore';
+import { useUserStore } from '../../store/useUserStore';
 
 type NavLinkItem = {
   name: string;
@@ -38,6 +39,9 @@ const navLinks: NavLinkItem[] = [
 const Header = () => {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const totalItems = useCartStore((state) => state.totalItems());
+  const user = useUserStore((state) => state.user);
+  const isAuthenticated = useUserStore((state) => state.isAuthenticated);
+  const logout = useUserStore((state) => state.logout);
 
   return (
     <header className="w-full bg-white shadow-sm sticky top-0 z-50">
@@ -97,6 +101,49 @@ const Header = () => {
         </nav>
 
         <div className="flex items-center gap-4">
+          {isAuthenticated && user ? (
+            <div className="group relative hidden md:block">
+              <button
+                type="button"
+                className="inline-flex items-center gap-2 rounded-full border border-gray-200 px-4 py-2 text-sm font-semibold text-gray-700 transition hover:border-primary hover:text-primary"
+              >
+                <User size={16} />
+                <span>{user.name}</span>
+                <ChevronDown size={14} />
+              </button>
+
+              <div className="absolute right-0 top-full z-30 mt-2 w-56 rounded-2xl border border-gray-100 bg-white p-2 shadow-xl opacity-0 invisible transition-all duration-200 group-hover:opacity-100 group-hover:visible">
+                <Link
+                  to="/tai-khoan"
+                  className="block rounded-xl px-4 py-3 text-sm font-medium text-gray-700 transition hover:bg-gray-50 hover:text-primary"
+                >
+                  Tai khoan cua toi
+                </Link>
+                <Link
+                  to="/don-hang-cua-toi"
+                  className="block rounded-xl px-4 py-3 text-sm font-medium text-gray-700 transition hover:bg-gray-50 hover:text-primary"
+                >
+                  Don hang cua toi
+                </Link>
+                <button
+                  type="button"
+                  onClick={logout}
+                  className="flex w-full items-center gap-2 rounded-xl px-4 py-3 text-left text-sm font-medium text-red-500 transition hover:bg-red-50"
+                >
+                  <LogOut size={14} />
+                  Dang xuat
+                </button>
+              </div>
+            </div>
+          ) : (
+            <Link
+              to="/tai-khoan"
+              className="hidden md:flex items-center gap-2 rounded-full border border-gray-200 px-4 py-2 text-sm font-semibold text-gray-700 transition hover:border-primary hover:text-primary"
+            >
+              <User size={16} />
+              <span>Dang nhap</span>
+            </Link>
+          )}
           <Link to="/cart" className="relative p-2 hover:bg-gray-100 rounded-full transition-colors">
             <ShoppingCart className="text-primary" />
             {totalItems > 0 && (
@@ -118,6 +165,33 @@ const Header = () => {
       {isMenuOpen && (
         <div className="lg:hidden bg-white border-t py-4 px-4 absolute w-full shadow-xl">
           <nav className="flex flex-col gap-4">
+            <div className="border-b border-gray-100 pb-3">
+              {isAuthenticated && user ? (
+                <div className="flex flex-col gap-3">
+                  <Link to="/don-hang-cua-toi" className="font-medium block py-1" onClick={() => setIsMenuOpen(false)}>
+                    Don hang cua toi
+                  </Link>
+                  <Link to="/tai-khoan" className="font-medium block py-1" onClick={() => setIsMenuOpen(false)}>
+                    {user.name}
+                  </Link>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      logout();
+                      setIsMenuOpen(false);
+                    }}
+                    className="flex items-center gap-2 py-1 text-left text-sm font-medium text-red-500"
+                  >
+                    <LogOut size={14} />
+                    Dang xuat
+                  </button>
+                </div>
+              ) : (
+                <Link to="/tai-khoan" className="font-medium block py-1" onClick={() => setIsMenuOpen(false)}>
+                  Dang nhap / Dang ky
+                </Link>
+              )}
+            </div>
             {navLinks.map((link) => (
               <div key={link.name}>
                 <Link

@@ -85,6 +85,10 @@ public class OrderDetail {
     public Integer getTotalParticipants() {
         return adultQuantity + childQuantity + infantQuantity;
     }
+
+    public Integer getOccupiedSeats() {
+        return adultQuantity + childQuantity;
+    }
 }
 
 // ORDER PARTICIPANT ENTITY - Thông tin hành khách
