@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Plus, Trash2, GripVertical, Image as ImageIcon, ArrowLeft } from 'lucide-react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { AdminTourFormState, FrontendCategory, createAdminTour, fetchAdminTourDetail, fetchCategories, slugify, toAdminTourFormState, toAdminTourPayload, updateAdminTour } from '../../services/travelApi';
+import { AdminTourFormState, FrontendCategory, createAdminTour, fetchAdminTourDetail, fetchCategories, getApiErrorMessage, slugify, toAdminTourFormState, toAdminTourPayload, updateAdminTour } from '../../services/travelApi';
 
 const initialForm: AdminTourFormState = {
   title: '',
@@ -40,7 +40,7 @@ const TourForm = () => {
 
     const loadPage = async () => {
       try {
-        const categoryData = await fetchCategories(true);
+        const categoryData = await fetchCategories();
         if (!active) return;
         setCategories(categoryData);
 
@@ -50,8 +50,8 @@ const TourForm = () => {
           const matchingCategory = categoryData.find((item) => item.slug === detail.categorySlug || item.name === detail.categoryName);
           setFormData(toAdminTourFormState(detail, matchingCategory?.id ?? ''));
         }
-      } catch {
-        if (active) setError('Khong the tai du lieu tour.');
+      } catch (err) {
+        if (active) setError(getApiErrorMessage(err, 'Khong the tai du lieu tour.'));
       } finally {
         if (active) setIsLoading(false);
       }
@@ -93,7 +93,10 @@ const TourForm = () => {
     }));
   };
 
-  const categoryOptions = useMemo(() => categories.filter((item) => item.status === 'active'), [categories]);
+  const categoryOptions = useMemo(
+    () => categories.filter((item) => item.status === 'active' || item.id === formData.categoryId),
+    [categories, formData.categoryId],
+  );
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -106,6 +109,11 @@ const TourForm = () => {
         slug: formData.slug || slugify(formData.title),
       });
 
+      if (!formData.categoryId) {
+        setError('Vui long chon danh muc cho tour.');
+        return;
+      }
+
       if (isEdit && id) {
         await updateAdminTour(id, payload);
       } else {
@@ -113,8 +121,8 @@ const TourForm = () => {
       }
 
       navigate('/admin/tours');
-    } catch {
-      setError('Khong the luu tour.');
+    } catch (err) {
+      setError(getApiErrorMessage(err, 'Khong the luu tour.'));
     } finally {
       setIsSaving(false);
     }
@@ -136,7 +144,7 @@ const TourForm = () => {
       <form onSubmit={handleSubmit} className="bg-white rounded-2xl shadow-sm border border-gray-100 p-8 space-y-8">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           <input type="text" name="title" value={formData.title} onChange={handleInputChange} placeholder="Ten tour" className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl outline-none" required />
-          <select name="categoryId" value={formData.categoryId} onChange={handleInputChange} className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl outline-none">
+          <select name="categoryId" value={formData.categoryId} onChange={handleInputChange} className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl outline-none" required>
             <option value="">Chon danh muc</option>
             {categoryOptions.map((category) => (
               <option key={category.id} value={category.id}>{category.name}</option>
@@ -169,7 +177,7 @@ const TourForm = () => {
             <input type="number" name="remainingSlots" value={formData.remainingSlots} onChange={handleInputChange} placeholder="So cho trong" className="w-full px-4 py-2 bg-gray-50 border border-gray-200 rounded-lg outline-none" />
             <input type="text" name="location" value={formData.location} onChange={handleInputChange} placeholder="Dia diem" className="w-full px-4 py-2 bg-gray-50 border border-gray-200 rounded-lg outline-none" />
             <input type="text" name="duration" value={formData.duration} onChange={handleInputChange} placeholder="Vi du: 3 Ngay 2 Dem" className="w-full px-4 py-2 bg-gray-50 border border-gray-200 rounded-lg outline-none" />
-            <input type="text" name="startDate" value={formData.startDate} onChange={handleInputChange} placeholder="dd/MM/yyyy" className="w-full px-4 py-2 bg-gray-50 border border-gray-200 rounded-lg outline-none" />
+            <input type="date" name="startDate" value={formData.startDate} onChange={handleInputChange} className="w-full px-4 py-2 bg-gray-50 border border-gray-200 rounded-lg outline-none" />
           </div>
         </div>
 

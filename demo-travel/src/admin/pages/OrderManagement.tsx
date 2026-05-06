@@ -1,16 +1,22 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import { Link } from 'react-router-dom';
 import {
   Search,
   Filter,
   Eye,
   RefreshCcw,
+  CheckCircle2,
   X,
 } from 'lucide-react';
 import {
+  getApiErrorMessage,
   fetchOrders,
+  recordOrderPaymentApi,
+  updateOrderItemCheckInApi,
   updateOrderPaymentStatusApi,
   updateOrderStatusApi,
   type AdminOrder,
+  type AdminOrderItem,
 } from '../../services/travelApi';
 
 const OrderManagement = () => {
@@ -21,13 +27,56 @@ const OrderManagement = () => {
   const [selectedOrder, setSelectedOrder] = useState<AdminOrder | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
+  const [isRecordingPayment, setIsRecordingPayment] = useState(false);
+  const [activeCheckInItemId, setActiveCheckInItemId] = useState<string | null>(null);
+  const [paymentDraft, setPaymentDraft] = useState({
+    amount: '',
+    paymentMethod: 'bank',
+    transactionId: '',
+    note: '',
+  });
+  const [checkInDrafts, setCheckInDrafts] = useState<Record<string, {
+    checkedInAdultQuantity: string;
+    checkedInChildQuantity: string;
+    checkedInInfantQuantity: string;
+    noShowAdultQuantity: string;
+    noShowChildQuantity: string;
+    noShowInfantQuantity: string;
+    note: string;
+  }>>({});
 
-  const loadOrders = async () => {
+  const checkInLabel: Record<AdminOrder['checkInStatus'], string> = {
+    not_started: 'Chua check-in',
+    partial: 'Check-in mot phan',
+    checked_in: 'Da check-in du',
+    no_show: 'Vang mat',
+    cancelled: 'Da huy',
+  };
+
+  const paymentOptionLabel: Record<AdminOrder['paymentOption'], string> = {
+    full: 'Thanh toan toan bo',
+    deposit: 'Dat coc',
+  };
+
+  const buildCheckInDraft = (item: AdminOrderItem) => ({
+    checkedInAdultQuantity: String(item.checkedInAdultQuantity),
+    checkedInChildQuantity: String(item.checkedInChildQuantity),
+    checkedInInfantQuantity: String(item.checkedInInfantQuantity),
+    noShowAdultQuantity: String(item.noShowAdultQuantity),
+    noShowChildQuantity: String(item.noShowChildQuantity),
+    noShowInfantQuantity: String(item.noShowInfantQuantity),
+    note: item.checkInNote,
+  });
+
+  const loadOrders = async (selectedOrderId?: string) => {
     setIsLoading(true);
     setError('');
     try {
       const data = await fetchOrders();
       setOrders(data);
+      if (selectedOrderId) {
+        setSelectedOrder(data.find((order) => order.id === selectedOrderId) ?? null);
+      }
     } catch {
       setError('Khong the tai danh sach don hang.');
     } finally {
@@ -38,6 +87,22 @@ const OrderManagement = () => {
   useEffect(() => {
     loadOrders();
   }, []);
+
+  useEffect(() => {
+    if (!selectedOrder) {
+      return;
+    }
+
+    setPaymentDraft({
+      amount: selectedOrder.outstandingAmount > 0 ? String(selectedOrder.outstandingAmount) : '',
+      paymentMethod: selectedOrder.paymentMethod || 'bank',
+      transactionId: '',
+      note: '',
+    });
+    setCheckInDrafts(
+      Object.fromEntries(selectedOrder.items.map((item) => [item.id, buildCheckInDraft(item)])),
+    );
+  }, [selectedOrder]);
 
   const filteredOrders = useMemo(
     () =>
@@ -58,18 +123,99 @@ const OrderManagement = () => {
   const handleStatusChange = async (id: string, status: AdminOrder['status']) => {
     try {
       await updateOrderStatusApi(id, status);
-      await loadOrders();
-    } catch {
-      setError('Khong the cap nhat trang thai don hang.');
+      await loadOrders(selectedOrder?.id === id ? id : undefined);
+    } catch (cause) {
+      setError(getApiErrorMessage(cause, 'Khong the cap nhat trang thai don hang.'));
     }
   };
 
   const handlePaymentStatusChange = async (id: string, status: AdminOrder['paymentStatus']) => {
     try {
       await updateOrderPaymentStatusApi(id, status);
-      await loadOrders();
-    } catch {
-      setError('Khong the cap nhat trang thai thanh toan.');
+      await loadOrders(selectedOrder?.id === id ? id : undefined);
+    } catch (cause) {
+      setError(getApiErrorMessage(cause, 'Khong the cap nhat trang thai thanh toan.'));
+    }
+  };
+
+  const handleOpenOrder = (order: AdminOrder) => {
+    setSelectedOrder(order);
+    setError('');
+  };
+
+  const handleRecordPayment = async () => {
+    if (!selectedOrder) {
+      return;
+    }
+
+    setIsRecordingPayment(true);
+    setError('');
+
+    try {
+      await recordOrderPaymentApi(selectedOrder.id, {
+        amount: Number(paymentDraft.amount),
+        paymentMethod: paymentDraft.paymentMethod,
+        transactionId: paymentDraft.transactionId,
+        note: paymentDraft.note,
+      });
+      await loadOrders(selectedOrder.id);
+    } catch (cause) {
+      setError(getApiErrorMessage(cause, 'Khong the ghi nhan thanh toan.'));
+    } finally {
+      setIsRecordingPayment(false);
+    }
+  };
+
+  const handleCheckInDraftChange = (
+    itemId: string,
+    field: keyof typeof checkInDrafts[string],
+    value: string,
+  ) => {
+    setCheckInDrafts((current) => ({
+      ...current,
+      [itemId]: {
+        ...(current[itemId] ?? {
+          checkedInAdultQuantity: '0',
+          checkedInChildQuantity: '0',
+          checkedInInfantQuantity: '0',
+          noShowAdultQuantity: '0',
+          noShowChildQuantity: '0',
+          noShowInfantQuantity: '0',
+          note: '',
+        }),
+        [field]: value,
+      },
+    }));
+  };
+
+  const handleSubmitCheckIn = async (item: AdminOrderItem) => {
+    if (!selectedOrder) {
+      return;
+    }
+
+    const draft = checkInDrafts[item.id];
+    if (!draft) {
+      return;
+    }
+
+    setActiveCheckInItemId(item.id);
+    setError('');
+
+    try {
+      await updateOrderItemCheckInApi(selectedOrder.id, item.id, {
+        checkedInAdultQuantity: Number(draft.checkedInAdultQuantity),
+        checkedInChildQuantity: Number(draft.checkedInChildQuantity),
+        checkedInInfantQuantity: Number(draft.checkedInInfantQuantity),
+        noShowAdultQuantity: Number(draft.noShowAdultQuantity),
+        noShowChildQuantity: Number(draft.noShowChildQuantity),
+        noShowInfantQuantity: Number(draft.noShowInfantQuantity),
+        note: draft.note,
+      });
+      await loadOrders(selectedOrder.id);
+    } catch (cause) {
+      setError(getApiErrorMessage(cause, 'Khong the cap nhat check-in.'));
+    } finally {
+      setActiveCheckInItemId(null);
     }
   };
 
@@ -172,6 +318,8 @@ const OrderManagement = () => {
                     <td className="px-6 py-4">
                       <div className="text-xs space-y-2">
                         <p className="text-gray-800 font-bold">{order.finalAmount.toLocaleString()}d</p>
+                        <p className="text-gray-500">Da thu: {order.paidAmount.toLocaleString()}d</p>
+                        <p className="text-gray-500">Con thieu: {order.outstandingAmount.toLocaleString()}d</p>
                         <p className="text-gray-500">PTTT: {order.paymentMethod}</p>
                         <select
                           value={order.paymentStatus}
@@ -202,9 +350,18 @@ const OrderManagement = () => {
                       <p className="text-[10px] text-gray-400">{order.createdAt}</p>
                     </td>
                     <td className="px-6 py-4 text-right">
-                      <button type="button" onClick={() => setSelectedOrder(order)} className="p-2 hover:bg-blue-50 rounded-lg text-gray-400 hover:text-blue-600 transition-colors">
-                        <Eye size={18} />
-                      </button>
+                      <div className="flex items-center justify-end gap-2">
+                        <Link
+                          to={`/admin/orders/check-in/${order.id}`}
+                          className="p-2 hover:bg-emerald-50 rounded-lg text-gray-400 hover:text-emerald-600 transition-colors"
+                          title="Mo man check-in"
+                        >
+                          <CheckCircle2 size={18} />
+                        </Link>
+                        <button type="button" onClick={() => handleOpenOrder(order)} className="p-2 hover:bg-blue-50 rounded-lg text-gray-400 hover:text-blue-600 transition-colors">
+                          <Eye size={18} />
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))
@@ -215,9 +372,10 @@ const OrderManagement = () => {
       </div>
 
       {selectedOrder && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 p-4">
-          <div className="w-full max-w-3xl rounded-3xl bg-white shadow-2xl overflow-hidden">
-            <div className="flex items-center justify-between border-b px-6 py-4">
+        <div className="fixed inset-0 z-[60] overflow-y-auto bg-black/50 p-3 sm:p-4">
+          <div className="flex min-h-full items-center justify-center">
+            <div className="flex w-full max-w-5xl max-h-[calc(100vh-2rem)] flex-col overflow-hidden rounded-3xl bg-white shadow-2xl sm:max-h-[calc(100vh-3rem)]">
+            <div className="shrink-0 flex items-center justify-between border-b px-4 py-4 sm:px-6">
               <div>
                 <h3 className="text-xl font-bold text-gray-900">Chi tiet don hang {selectedOrder.code}</h3>
                 <p className="text-sm text-gray-500">{selectedOrder.createdAt}</p>
@@ -226,8 +384,18 @@ const OrderManagement = () => {
                 <X size={18} />
               </button>
             </div>
-            <div className="grid gap-6 p-6 md:grid-cols-2">
-              <div className="rounded-2xl bg-gray-50 p-4 text-sm">
+            <div className="shrink-0 border-b bg-gray-50 px-4 py-3 sm:px-6">
+              <Link
+                to={`/admin/orders/check-in/${selectedOrder.id}`}
+                className="inline-flex items-center gap-2 rounded-full bg-emerald-600 px-4 py-2 text-sm font-bold text-white transition hover:bg-emerald-700"
+              >
+                <CheckCircle2 size={16} />
+                Mo man check-in rieng
+              </Link>
+            </div>
+            <div className="min-h-0 flex-1 overflow-y-auto">
+            <div className="grid gap-4 p-4 sm:gap-6 sm:p-6 lg:grid-cols-[minmax(0,1fr)_minmax(340px,420px)]">
+              <div className="rounded-2xl bg-gray-50 p-4 text-sm min-w-0">
                 <h4 className="font-bold text-gray-900 mb-3">Thong tin khach</h4>
                 <p>{selectedOrder.customerName}</p>
                 <p>{selectedOrder.customerPhone}</p>
@@ -235,22 +403,93 @@ const OrderManagement = () => {
                 <p>{selectedOrder.customerAddress || 'Chua cap nhat dia chi'}</p>
                 {selectedOrder.customerNote && <p className="mt-3 text-gray-500">Ghi chu: {selectedOrder.customerNote}</p>}
               </div>
-              <div className="rounded-2xl bg-gray-50 p-4 text-sm">
+              <div className="rounded-2xl bg-gray-50 p-4 text-sm min-w-0">
                 <h4 className="font-bold text-gray-900 mb-3">Thanh toan</h4>
+                <p>Hinh thuc: {paymentOptionLabel[selectedOrder.paymentOption]}</p>
                 <p>Phuong thuc: {selectedOrder.paymentMethod}</p>
                 <p>Trang thai: {selectedOrder.paymentStatus}</p>
                 <p>Tong tien: {selectedOrder.totalAmount.toLocaleString()}d</p>
                 <p>Giam gia: {selectedOrder.discountAmount.toLocaleString()}d</p>
+                <p>Tien coc toi thieu: {selectedOrder.requiredDepositAmount.toLocaleString()}d</p>
+                <p>Da thu: {selectedOrder.paidAmount.toLocaleString()}d</p>
+                <p>Con thieu: {selectedOrder.outstandingAmount.toLocaleString()}d</p>
+                <p>Han thanh toan: {selectedOrder.balanceDueDate}</p>
+                <p>Check-in tong: {checkInLabel[selectedOrder.checkInStatus]}</p>
+                {selectedOrder.refundAmount > 0 && <p>Hoan tien: {selectedOrder.refundAmount.toLocaleString()}d</p>}
+                {selectedOrder.cancellationReason && <p>Ly do huy: {selectedOrder.cancellationReason}</p>}
                 <p className="font-bold text-primary mt-2">Thanh tien: {selectedOrder.finalAmount.toLocaleString()}d</p>
+
+                {selectedOrder.status !== 'cancelled' && (
+                  <div className="mt-4 rounded-2xl border border-gray-200 bg-white p-4">
+                    <h5 className="font-bold text-gray-900">Ghi nhan thanh toan</h5>
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setPaymentDraft((current) => ({ ...current, amount: String(Math.max(selectedOrder.requiredDepositAmount - selectedOrder.paidAmount, 0)) }))}
+                        className="rounded-full bg-secondary/10 px-3 py-1 text-[11px] font-bold text-secondary"
+                      >
+                        Thu muc coc
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setPaymentDraft((current) => ({ ...current, amount: String(selectedOrder.outstandingAmount) }))}
+                        className="rounded-full bg-primary/10 px-3 py-1 text-[11px] font-bold text-primary"
+                      >
+                        Thu so con lai
+                      </button>
+                    </div>
+                    <div className="mt-3 grid gap-3">
+                      <input
+                        type="number"
+                        min="0"
+                        step="1000"
+                        value={paymentDraft.amount}
+                        onChange={(event) => setPaymentDraft((current) => ({ ...current, amount: event.target.value }))}
+                        className="rounded-xl border border-gray-200 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary/20"
+                        placeholder="So tien thu"
+                      />
+                      <select
+                        value={paymentDraft.paymentMethod}
+                        onChange={(event) => setPaymentDraft((current) => ({ ...current, paymentMethod: event.target.value }))}
+                        className="rounded-xl border border-gray-200 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary/20"
+                      >
+                        <option value="bank">Chuyen khoan</option>
+                        <option value="cash">Tien mat</option>
+                        <option value="momo">MoMo</option>
+                      </select>
+                      <input
+                        value={paymentDraft.transactionId}
+                        onChange={(event) => setPaymentDraft((current) => ({ ...current, transactionId: event.target.value }))}
+                        className="rounded-xl border border-gray-200 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary/20"
+                        placeholder="Ma giao dich"
+                      />
+                      <textarea
+                        rows={2}
+                        value={paymentDraft.note}
+                        onChange={(event) => setPaymentDraft((current) => ({ ...current, note: event.target.value }))}
+                        className="rounded-xl border border-gray-200 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary/20"
+                        placeholder="Ghi chu noi bo"
+                      />
+                      <button
+                        type="button"
+                        onClick={handleRecordPayment}
+                        disabled={isRecordingPayment || !paymentDraft.amount}
+                        className="rounded-xl bg-primary px-4 py-2 text-sm font-bold text-white transition hover:bg-primary/90 disabled:opacity-60"
+                      >
+                        {isRecordingPayment ? 'Dang ghi nhan...' : 'Ghi nhan thanh toan'}
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
-            <div className="px-6 pb-6">
+            <div className="px-4 pb-4 sm:px-6 sm:pb-6">
               <h4 className="font-bold text-gray-900 mb-3">Danh sach tour</h4>
               <div className="space-y-3">
                 {selectedOrder.items.map((item) => (
                   <div key={item.id} className="rounded-2xl border border-gray-200 p-4 text-sm">
-                    <div className="flex items-center justify-between gap-4">
-                      <div>
+                    <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                      <div className="min-w-0">
                         <p className="font-bold text-gray-900">{item.name}</p>
                         <p className="text-gray-500">{item.departureDate} - {item.returnDate}</p>
                       </div>
@@ -259,9 +498,105 @@ const OrderManagement = () => {
                     <p className="mt-2 text-gray-500">
                       Nguoi lon: {item.adultQuantity} | Tre em: {item.childQuantity} | Em be: {item.infantQuantity}
                     </p>
+                    <p className="mt-2 text-gray-500">
+                      Check-in: {checkInLabel[item.checkInStatus]} | Da den {item.checkedInAdultQuantity + item.checkedInChildQuantity + item.checkedInInfantQuantity} |
+                      Vang {item.noShowAdultQuantity + item.noShowChildQuantity + item.noShowInfantQuantity}
+                    </p>
+                    {item.checkInNote && <p className="mt-2 text-gray-500">Ghi chu check-in: {item.checkInNote}</p>}
+
+                    {selectedOrder.status !== 'cancelled' && (
+                      <div className="mt-4 rounded-2xl bg-gray-50 p-4">
+                        <h5 className="font-bold text-gray-900">Cap nhat check-in</h5>
+                        <div className="mt-3 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+                          <label className="text-xs font-medium text-gray-600">
+                            Da den nguoi lon
+                            <input
+                              type="number"
+                              min="0"
+                              max={item.adultQuantity}
+                              value={checkInDrafts[item.id]?.checkedInAdultQuantity ?? '0'}
+                              onChange={(event) => handleCheckInDraftChange(item.id, 'checkedInAdultQuantity', event.target.value)}
+                              className="mt-1 w-full rounded-xl border border-gray-200 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary/20"
+                            />
+                          </label>
+                          <label className="text-xs font-medium text-gray-600">
+                            Da den tre em
+                            <input
+                              type="number"
+                              min="0"
+                              max={item.childQuantity}
+                              value={checkInDrafts[item.id]?.checkedInChildQuantity ?? '0'}
+                              onChange={(event) => handleCheckInDraftChange(item.id, 'checkedInChildQuantity', event.target.value)}
+                              className="mt-1 w-full rounded-xl border border-gray-200 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary/20"
+                            />
+                          </label>
+                          <label className="text-xs font-medium text-gray-600">
+                            Da den em be
+                            <input
+                              type="number"
+                              min="0"
+                              max={item.infantQuantity}
+                              value={checkInDrafts[item.id]?.checkedInInfantQuantity ?? '0'}
+                              onChange={(event) => handleCheckInDraftChange(item.id, 'checkedInInfantQuantity', event.target.value)}
+                              className="mt-1 w-full rounded-xl border border-gray-200 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary/20"
+                            />
+                          </label>
+                          <label className="text-xs font-medium text-gray-600">
+                            Vang nguoi lon
+                            <input
+                              type="number"
+                              min="0"
+                              max={item.adultQuantity}
+                              value={checkInDrafts[item.id]?.noShowAdultQuantity ?? '0'}
+                              onChange={(event) => handleCheckInDraftChange(item.id, 'noShowAdultQuantity', event.target.value)}
+                              className="mt-1 w-full rounded-xl border border-gray-200 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary/20"
+                            />
+                          </label>
+                          <label className="text-xs font-medium text-gray-600">
+                            Vang tre em
+                            <input
+                              type="number"
+                              min="0"
+                              max={item.childQuantity}
+                              value={checkInDrafts[item.id]?.noShowChildQuantity ?? '0'}
+                              onChange={(event) => handleCheckInDraftChange(item.id, 'noShowChildQuantity', event.target.value)}
+                              className="mt-1 w-full rounded-xl border border-gray-200 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary/20"
+                            />
+                          </label>
+                          <label className="text-xs font-medium text-gray-600">
+                            Vang em be
+                            <input
+                              type="number"
+                              min="0"
+                              max={item.infantQuantity}
+                              value={checkInDrafts[item.id]?.noShowInfantQuantity ?? '0'}
+                              onChange={(event) => handleCheckInDraftChange(item.id, 'noShowInfantQuantity', event.target.value)}
+                              className="mt-1 w-full rounded-xl border border-gray-200 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary/20"
+                            />
+                          </label>
+                        </div>
+                        <textarea
+                          rows={2}
+                          value={checkInDrafts[item.id]?.note ?? ''}
+                          onChange={(event) => handleCheckInDraftChange(item.id, 'note', event.target.value)}
+                          className="mt-3 w-full rounded-xl border border-gray-200 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary/20"
+                          placeholder="Ghi chu check-in"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => handleSubmitCheckIn(item)}
+                          disabled={activeCheckInItemId === item.id}
+                          className="mt-3 rounded-xl bg-secondary px-4 py-2 text-sm font-bold text-white transition hover:bg-secondary/90 disabled:opacity-60"
+                        >
+                          {activeCheckInItemId === item.id ? 'Dang cap nhat...' : 'Luu check-in'}
+                        </button>
+                      </div>
+                    )}
                   </div>
                 ))}
               </div>
+            </div>
+            </div>
             </div>
           </div>
         </div>

@@ -27,6 +27,7 @@ public class TourDetailDTO {
     private String departureLocation;
     private Integer durationDays;
     private Integer durationNights;
+    private BigDecimal basePrice;
     private BigDecimal adultPrice;
     private BigDecimal childPrice;
     private BigDecimal infantPrice;

@@ -4,6 +4,7 @@ import { Star, MapPin, Calendar, Clock, User, ChevronRight, Plus, Minus } from '
 import { useCartStore } from '../store/useCartStore';
 import type { Tour } from '../types';
 import { calculateTourPrice, fetchTourDetail, type TourPriceQuote } from '../services/travelApi';
+import SafeImage from '../components/common/SafeImage';
 
 const fallbackQuote = (tour: Tour | null, quantities: { adults: number; children: number; infants: number }): TourPriceQuote => ({
   adultSubtotal: (tour?.price ?? 0) * quantities.adults,
@@ -175,7 +176,7 @@ const TourDetail = () => {
   return (
     <div className="bg-gray-50 min-h-screen pb-20">
       <div className="relative h-64 md:h-80 flex items-center overflow-hidden">
-        <img
+        <SafeImage
           src={tour.image}
           alt={tour.title}
           className="absolute inset-0 w-full h-full object-cover"
@@ -199,7 +200,7 @@ const TourDetail = () => {
           <div className="w-full lg:w-2/3 flex flex-col gap-8">
             <div className="bg-white p-4 rounded-3xl shadow-sm border border-gray-100">
               <div className="aspect-video rounded-2xl overflow-hidden mb-4">
-                <img src={tour.image} alt={tour.title} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                <SafeImage src={tour.image} alt={tour.title} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
               </div>
             </div>
 
@@ -264,7 +265,7 @@ const TourDetail = () => {
                         <p className="text-gray-600 text-sm leading-relaxed mb-4">{item.content}</p>
                         {item.image && (
                           <div className="aspect-video rounded-xl overflow-hidden max-w-md">
-                            <img src={item.image} alt={item.title} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                            <SafeImage src={item.image} alt={item.title} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
                           </div>
                         )}
                       </div>
@@ -280,7 +281,7 @@ const TourDetail = () => {
               <div className="p-6 border-b border-gray-100">
                 <h3 className="text-xl font-bold text-primary mb-4">Chuyen Di Cua Ban</h3>
                 <div className="flex gap-4 mb-4">
-                  <img src={tour.image} alt="Tour" className="w-24 h-24 rounded-xl object-cover" referrerPolicy="no-referrer" />
+                  <SafeImage src={tour.image} alt="Tour" className="w-24 h-24 rounded-xl object-cover" referrerPolicy="no-referrer" />
                   <div className="flex flex-col gap-1">
                     <h4 className="font-bold text-sm line-clamp-2">{tour.title}</h4>
                     <div className="flex text-yellow-400">

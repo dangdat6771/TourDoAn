@@ -5,6 +5,7 @@ import FilterSidebar, { type TourListFilters } from '../components/tour/FilterSi
 import TourCard from '../components/tour/TourCard';
 import type { Tour } from '../types';
 import { fetchPublicToursPage } from '../services/travelApi';
+import SafeImage from '../components/common/SafeImage';
 
 const regionNames: Record<string, string> = {
   'mien-bac': 'Mien Bac',
@@ -207,7 +208,7 @@ const TourList = () => {
   return (
     <div className="bg-gray-50 min-h-screen">
       <div className="relative h-48 md:h-64 flex items-center overflow-hidden">
-        <img
+        <SafeImage
           src="https://picsum.photos/seed/banner-list/1920/400"
           alt="Banner"
           className="absolute inset-0 w-full h-full object-cover"

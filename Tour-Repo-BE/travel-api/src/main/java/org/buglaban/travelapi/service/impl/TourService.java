@@ -132,6 +132,9 @@ public class TourService implements ITourService {
     @Override
     public Page<AdminTourSummaryDTO> getAdminTours(TourFilterRequestDTO filterDTO) {
         Specification<Tour> spec = TourSpecification.filter(filterDTO);
+        if (filterDTO.getStatus() == null) {
+            spec = spec.and((root, query, cb) -> cb.notEqual(root.get("status"), TourStatus.ARCHIVED));
+        }
         Pageable pageable = PageRequest.of(filterDTO.getPage(), filterDTO.getPageSize(),
                 Sort.by(Sort.Direction.DESC, "createdAt"));
         return tourRepository.findAll(spec, pageable).map(this::toAdminSummaryDTO);
@@ -160,7 +163,8 @@ public class TourService implements ITourService {
                 .build();
 
         if (dto.getCategoryId() != null) {
-            tour.setCategory(categoryRepository.findById(dto.getCategoryId()).get());
+            tour.setCategory(categoryRepository.findById(dto.getCategoryId())
+                    .orElseThrow(() -> new DataNotFoundException("Category not found: " + dto.getCategoryId())));
         }
 
         tourRepository.save(tour);
@@ -244,15 +248,49 @@ public class TourService implements ITourService {
             detailRepository.saveAll(details);
         }
 
+        if (dto.getSchedules() != null && !dto.getSchedules().isEmpty()) {
+            List<TourSchedule> existingSchedules = scheduleRepository.findByTourIdOrderByIdAsc(id);
+            List<TourScheduleRequestDTO> requestedSchedules = dto.getSchedules();
+
+            for (int index = 0; index < requestedSchedules.size(); index++) {
+                TourScheduleRequestDTO requested = requestedSchedules.get(index);
+                TourSchedule schedule;
+
+                if (index < existingSchedules.size()) {
+                    schedule = existingSchedules.get(index);
+                } else {
+                    schedule = TourSchedule.builder()
+                            .tour(tour)
+                            .bookedSeats(0)
+                            .build();
+                }
+
+                schedule.setTour(tour);
+                schedule.setDepartureDate(requested.getDepartureDate());
+                schedule.setReturnDate(requested.getReturnDate());
+                schedule.setAvailableSeats(requested.getAvailableSeats());
+                schedule.setNote(requested.getNote());
+                schedule.setStatus(requested.getStatus() != null ? requested.getStatus() : ScheduleStatus.AVAILABLE);
+
+                if (schedule.getBookedSeats() == null) {
+                    schedule.setBookedSeats(0);
+                }
+
+                scheduleRepository.save(schedule);
+            }
+        }
+
         tourRepository.save(tour);
     }
 
     @Override
     public void deleteTour(Long id) {
-        if (!tourRepository.existsById(id)) {
-            throw new DataNotFoundException("Tour not found: " + id);
-        }
-        tourRepository.deleteById(id);
+        Tour tour = tourRepository.findById(id)
+                .orElseThrow(() -> new DataNotFoundException("Tour not found: " + id));
+
+        // Keep historical order/review data intact by archiving instead of hard deleting.
+        tour.setStatus(TourStatus.ARCHIVED);
+        tourRepository.save(tour);
     }
 
     @Override
@@ -365,6 +403,7 @@ public class TourService implements ITourService {
                 .departureLocation(tour.getDepartureLocation())
                 .durationDays(tour.getDurationDays())
                 .durationNights(tour.getDurationNights())
+                .basePrice(tour.getBasePrice())
                 .adultPrice(tour.getAdultPrice())
                 .childPrice(tour.getChildPrice())
                 .infantPrice(tour.getInfantPrice())

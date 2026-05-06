@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { ChevronRight } from 'lucide-react';
 import TourCard from '../tour/TourCard';
 import { Tour } from '../../types';
+import SafeImage from '../common/SafeImage';
 
 interface TourSectionProps {
   title: string;
@@ -39,7 +40,7 @@ const TourSection: React.FC<TourSectionProps> = ({ title, tours, viewAllPath, ba
 
         {bannerImage && (
           <div className="mt-16 rounded-3xl overflow-hidden h-48 md:h-64 relative group">
-            <img 
+            <SafeImage 
               src={bannerImage} 
               alt="Section Banner" 
               className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700"

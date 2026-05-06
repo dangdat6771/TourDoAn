@@ -2,11 +2,13 @@ package org.buglaban.travelapi.model;
 // ORDER DETAIL ENTITY - Chi tiết đơn đặt tour
 import jakarta.persistence.*;
 import lombok.*;
+import org.buglaban.travelapi.util.CheckInStatus;
 import org.buglaban.travelapi.util.Gender;
 import org.buglaban.travelapi.util.ParticipantType;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.HashSet;
 import java.util.Set;
 
@@ -70,6 +72,34 @@ public class OrderDetail {
     @Column(name = "subtotal", nullable = false, precision = 15, scale = 2)
     private BigDecimal subtotal;
 
+    @Enumerated(EnumType.STRING)
+    @Column(name = "check_in_status")
+    private CheckInStatus checkInStatus = CheckInStatus.NOT_STARTED;
+
+    @Column(name = "checked_in_adult_quantity")
+    private Integer checkedInAdultQuantity = 0;
+
+    @Column(name = "checked_in_child_quantity")
+    private Integer checkedInChildQuantity = 0;
+
+    @Column(name = "checked_in_infant_quantity")
+    private Integer checkedInInfantQuantity = 0;
+
+    @Column(name = "no_show_adult_quantity")
+    private Integer noShowAdultQuantity = 0;
+
+    @Column(name = "no_show_child_quantity")
+    private Integer noShowChildQuantity = 0;
+
+    @Column(name = "no_show_infant_quantity")
+    private Integer noShowInfantQuantity = 0;
+
+    @Column(name = "last_check_in_at")
+    private LocalDateTime lastCheckInAt;
+
+    @Column(name = "check_in_note", columnDefinition = "TEXT")
+    private String checkInNote;
+
     // Quan hệ One-to-Many với OrderParticipant
     @OneToMany(mappedBy = "orderDetail", cascade = CascadeType.ALL, fetch = FetchType.LAZY, orphanRemoval = true)
     private Set<OrderParticipant> participants = new HashSet<>();
@@ -88,6 +118,18 @@ public class OrderDetail {
 
     public Integer getOccupiedSeats() {
         return adultQuantity + childQuantity;
+    }
+
+    public Integer getTotalCheckedIn() {
+        return safeInt(checkedInAdultQuantity) + safeInt(checkedInChildQuantity) + safeInt(checkedInInfantQuantity);
+    }
+
+    public Integer getTotalNoShow() {
+        return safeInt(noShowAdultQuantity) + safeInt(noShowChildQuantity) + safeInt(noShowInfantQuantity);
+    }
+
+    private int safeInt(Integer value) {
+        return value == null ? 0 : value;
     }
 }
 

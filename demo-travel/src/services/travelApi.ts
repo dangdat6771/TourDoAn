@@ -90,6 +90,7 @@ type TourDetailApi = {
   departureLocation?: string;
   durationDays?: number;
   durationNights?: number;
+  basePrice?: number;
   adultPrice?: number;
   childPrice?: number;
   infantPrice?: number;
@@ -161,6 +162,15 @@ type OrderItemApi = {
   childPrice?: number;
   infantPrice?: number;
   subtotal?: number;
+  checkInStatus?: string;
+  checkedInAdultQuantity?: number;
+  checkedInChildQuantity?: number;
+  checkedInInfantQuantity?: number;
+  noShowAdultQuantity?: number;
+  noShowChildQuantity?: number;
+  noShowInfantQuantity?: number;
+  lastCheckInAt?: string;
+  checkInNote?: string;
 };
 
 type OrderApi = {
@@ -175,9 +185,24 @@ type OrderApi = {
   totalAmount?: number;
   discountAmount?: number;
   finalAmount?: number;
+  paymentOption?: string;
+  depositRate?: number;
+  requiredDepositAmount?: number;
+  paidAmount?: number;
+  refundedAmount?: number;
+  outstandingAmount?: number;
+  balanceDueDate?: string;
   paymentMethod?: string;
   paymentStatus?: string;
   orderStatus?: string;
+  checkInStatus?: string;
+  participationStatus?: string;
+  refundRate?: number;
+  refundAmount?: number;
+  cancelledAt?: string;
+  cancellationReason?: string;
+  participationConfirmedAt?: string;
+  participationNote?: string;
   createdAt?: string;
   updatedAt?: string;
   items?: OrderItemApi[];
@@ -281,6 +306,7 @@ export type CheckoutPayload = {
     infantQuantity: number;
   }[];
   paymentMethod: string;
+  paymentOption: 'full' | 'deposit';
 };
 
 export type AdminOrderItem = {
@@ -297,6 +323,15 @@ export type AdminOrderItem = {
   childPrice: number;
   infantPrice: number;
   subtotal: number;
+  checkInStatus: 'not_started' | 'partial' | 'checked_in' | 'no_show' | 'cancelled';
+  checkedInAdultQuantity: number;
+  checkedInChildQuantity: number;
+  checkedInInfantQuantity: number;
+  noShowAdultQuantity: number;
+  noShowChildQuantity: number;
+  noShowInfantQuantity: number;
+  lastCheckInAt: string;
+  checkInNote: string;
 };
 
 export type AdminOrder = {
@@ -311,9 +346,24 @@ export type AdminOrder = {
   totalAmount: number;
   discountAmount: number;
   finalAmount: number;
+  paymentOption: 'full' | 'deposit';
+  depositRate: number;
+  requiredDepositAmount: number;
+  paidAmount: number;
+  refundedAmount: number;
+  outstandingAmount: number;
+  balanceDueDate: string;
   paymentMethod: string;
   paymentStatus: 'pending' | 'paid' | 'cancelled' | 'refunded';
   status: 'pending' | 'confirmed' | 'processing' | 'completed' | 'cancelled';
+  checkInStatus: 'not_started' | 'partial' | 'checked_in' | 'no_show' | 'cancelled';
+  participationStatus: 'pending' | 'confirmed';
+  refundRate: number;
+  refundAmount: number;
+  cancelledAt: string;
+  cancellationReason: string;
+  participationConfirmedAt: string;
+  participationNote: string;
   createdAt: string;
   updatedAt: string;
   rawCreatedAt: string;
@@ -550,14 +600,43 @@ const normalizePaymentStatus = (status?: string): AdminOrder['paymentStatus'] =>
   if (normalized === 'paid') {
     return 'paid';
   }
+  if (normalized === 'partially_paid') {
+    return 'pending';
+  }
   if (normalized === 'cancelled') {
     return 'cancelled';
   }
   if (normalized === 'refunded') {
     return 'refunded';
   }
+  if (normalized === 'partially_refunded') {
+    return 'refunded';
+  }
   return 'pending';
 };
+
+const normalizePaymentOption = (value?: string): AdminOrder['paymentOption'] =>
+  normalizeText(value) === 'deposit' ? 'deposit' : 'full';
+
+const normalizeCheckInStatus = (value?: string): AdminOrder['checkInStatus'] => {
+  const normalized = normalizeText(value);
+  if (normalized === 'partial') {
+    return 'partial';
+  }
+  if (normalized === 'checked_in') {
+    return 'checked_in';
+  }
+  if (normalized === 'no_show') {
+    return 'no_show';
+  }
+  if (normalized === 'cancelled') {
+    return 'cancelled';
+  }
+  return 'not_started';
+};
+
+const normalizeParticipationStatus = (value?: string): AdminOrder['participationStatus'] =>
+  normalizeText(value) === 'confirmed' ? 'confirmed' : 'pending';
 
 const normalizeGender = (gender?: string): AdminUserRow['gender'] => {
   const normalized = normalizeText(gender);
@@ -722,6 +801,15 @@ const mapOrderItem = (item: OrderItemApi): AdminOrderItem => ({
   childPrice: parseNumber(item.childPrice),
   infantPrice: parseNumber(item.infantPrice),
   subtotal: parseNumber(item.subtotal),
+  checkInStatus: normalizeCheckInStatus(item.checkInStatus),
+  checkedInAdultQuantity: parseNumber(item.checkedInAdultQuantity),
+  checkedInChildQuantity: parseNumber(item.checkedInChildQuantity),
+  checkedInInfantQuantity: parseNumber(item.checkedInInfantQuantity),
+  noShowAdultQuantity: parseNumber(item.noShowAdultQuantity),
+  noShowChildQuantity: parseNumber(item.noShowChildQuantity),
+  noShowInfantQuantity: parseNumber(item.noShowInfantQuantity),
+  lastCheckInAt: formatDateTime(item.lastCheckInAt),
+  checkInNote: item.checkInNote || '',
 });
 
 const mapOrder = (order: OrderApi): AdminOrder => ({
@@ -736,9 +824,24 @@ const mapOrder = (order: OrderApi): AdminOrder => ({
   totalAmount: parseNumber(order.totalAmount),
   discountAmount: parseNumber(order.discountAmount),
   finalAmount: parseNumber(order.finalAmount),
+  paymentOption: normalizePaymentOption(order.paymentOption),
+  depositRate: parseNumber(order.depositRate),
+  requiredDepositAmount: parseNumber(order.requiredDepositAmount),
+  paidAmount: parseNumber(order.paidAmount),
+  refundedAmount: parseNumber(order.refundedAmount),
+  outstandingAmount: parseNumber(order.outstandingAmount),
+  balanceDueDate: formatDate(order.balanceDueDate),
   paymentMethod: order.paymentMethod || 'bank',
   paymentStatus: normalizePaymentStatus(order.paymentStatus),
   status: normalizeOrderStatus(order.orderStatus),
+  checkInStatus: normalizeCheckInStatus(order.checkInStatus),
+  participationStatus: normalizeParticipationStatus(order.participationStatus),
+  refundRate: parseNumber(order.refundRate),
+  refundAmount: parseNumber(order.refundAmount),
+  cancelledAt: formatDateTime(order.cancelledAt),
+  cancellationReason: order.cancellationReason || '',
+  participationConfirmedAt: formatDateTime(order.participationConfirmedAt),
+  participationNote: order.participationNote || '',
   createdAt: formatDateTime(order.createdAt),
   updatedAt: formatDateTime(order.updatedAt),
   rawCreatedAt: order.createdAt || '',
@@ -766,6 +869,13 @@ const parseDateInput = (value: string) => {
     return null;
   }
 
+  const isoMatch = value.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (isoMatch) {
+    const [, year, month, day] = isoMatch;
+    const parsed = new Date(Number(year), Number(month) - 1, Number(day));
+    return Number.isNaN(parsed.getTime()) ? null : parsed;
+  }
+
   const direct = new Date(value);
   if (!Number.isNaN(direct.getTime())) {
     return direct;
@@ -786,7 +896,10 @@ const toIsoDate = (value: string) => {
   if (!parsed) {
     return '';
   }
-  return parsed.toISOString().slice(0, 10);
+  const year = parsed.getFullYear();
+  const month = String(parsed.getMonth() + 1).padStart(2, '0');
+  const day = String(parsed.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
 };
 
 const addDays = (value: string, days: number) => {
@@ -795,7 +908,20 @@ const addDays = (value: string, days: number) => {
     return '';
   }
   parsed.setDate(parsed.getDate() + Math.max(days, 0));
-  return parsed.toISOString().slice(0, 10);
+  return toIsoDate(
+    `${parsed.getFullYear()}-${String(parsed.getMonth() + 1).padStart(2, '0')}-${String(parsed.getDate()).padStart(2, '0')}`,
+  );
+};
+
+const formatDateForInput = (value?: string | number[] | null) => {
+  const parsed = toDateValue(value);
+  if (!parsed) {
+    return '';
+  }
+  const year = parsed.getFullYear();
+  const month = String(parsed.getMonth() + 1).padStart(2, '0');
+  const day = String(parsed.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
 };
 
 const parseDuration = (value: string) => {
@@ -858,12 +984,12 @@ export const toAdminTourFormState = (tour: TourDetailApi, categoryId = ''): Admi
   price: parseNumber(tour.adultPrice),
   childPrice: parseNumber(tour.childPrice),
   infantPrice: parseNumber(tour.infantPrice),
-  originalPrice: parseNumber(tour.adultPrice),
+  originalPrice: parseNumber(tour.basePrice ?? tour.adultPrice),
   remainingSlots: parseNumber(tour.schedules?.[0]?.availableSlots ?? tour.schedules?.[0]?.availableSeats),
   childRemainingSlots: 0,
   infantRemainingSlots: 0,
   duration: formatDuration(tour.durationDays, tour.durationNights),
-  startDate: formatDate(tour.schedules?.[0]?.departureDate),
+  startDate: formatDateForInput(tour.schedules?.[0]?.departureDate),
   location: tour.destination || tour.departureLocation || '',
   description: tour.description || '',
   image: tour.featuredImage || FALLBACK_IMAGE,
@@ -1033,7 +1159,16 @@ export const registerUser = async (payload: { fullName: string; email: string; p
   );
 
 export const createCheckoutOrder = async (payload: CheckoutPayload, user?: UserSession | null) =>
-  unwrap<number>(apiClient.post('/order/', payload, { headers: buildCurrentUserHeaders(user) }));
+  unwrap<number>(
+    apiClient.post(
+      '/order/',
+      {
+        ...payload,
+        paymentOption: payload.paymentOption.toUpperCase(),
+      },
+      { headers: buildCurrentUserHeaders(user) },
+    ),
+  );
 
 export const fetchOrders = async () => {
   const page = await unwrap<SpringPage<OrderApi>>(
@@ -1074,14 +1209,71 @@ export const fetchMyOrders = async (
   };
 };
 
-export const cancelMyOrder = async (id: string, user: UserSession) =>
-  unwrap(apiClient.put(`/order/${id}/cancel`, null, { headers: buildCurrentUserHeaders(user) }));
+export const cancelMyOrder = async (id: string, user: UserSession, reason?: string) =>
+  unwrap(
+    apiClient.put(
+      `/order/${id}/cancel`,
+      reason && reason.trim() ? { reason: reason.trim() } : null,
+      { headers: buildCurrentUserHeaders(user) },
+    ),
+  );
+
+export const confirmOrderParticipationApi = async (
+  id: string,
+  user: UserSession,
+  payload?: { note?: string },
+) =>
+  unwrap(
+    apiClient.patch(
+      `/order/${id}/participation`,
+      { note: payload?.note || '' },
+      { headers: buildCurrentUserHeaders(user) },
+    ),
+  );
 
 export const updateOrderStatusApi = async (id: string, status: AdminOrder['status']) =>
   unwrap(apiClient.patch(`/order/${id}/status`, null, { params: { status: status.toUpperCase() } }));
 
 export const updateOrderPaymentStatusApi = async (id: string, status: AdminOrder['paymentStatus']) =>
   unwrap(apiClient.patch(`/order/${id}/payment-status`, null, { params: { status: status.toUpperCase() } }));
+
+export const recordOrderPaymentApi = async (
+  id: string,
+  payload: { amount: number; paymentMethod?: string; transactionId?: string; note?: string },
+) =>
+  unwrap(
+    apiClient.patch(`/order/${id}/payment`, {
+      amount: parseNumber(payload.amount),
+      paymentMethod: payload.paymentMethod,
+      transactionId: payload.transactionId,
+      note: payload.note,
+    }),
+  );
+
+export const updateOrderItemCheckInApi = async (
+  orderId: string,
+  detailId: string,
+  payload: {
+    checkedInAdultQuantity: number;
+    checkedInChildQuantity: number;
+    checkedInInfantQuantity: number;
+    noShowAdultQuantity: number;
+    noShowChildQuantity: number;
+    noShowInfantQuantity: number;
+    note?: string;
+  },
+) =>
+  unwrap(
+    apiClient.patch(`/order/${orderId}/items/${detailId}/check-in`, {
+      checkedInAdultQuantity: parseNumber(payload.checkedInAdultQuantity),
+      checkedInChildQuantity: parseNumber(payload.checkedInChildQuantity),
+      checkedInInfantQuantity: parseNumber(payload.checkedInInfantQuantity),
+      noShowAdultQuantity: parseNumber(payload.noShowAdultQuantity),
+      noShowChildQuantity: parseNumber(payload.noShowChildQuantity),
+      noShowInfantQuantity: parseNumber(payload.noShowInfantQuantity),
+      note: payload.note || '',
+    }),
+  );
 
 export const fetchUsers = async () => {
   const response = await unwrap<LegacyPage<UserApi[]>>(

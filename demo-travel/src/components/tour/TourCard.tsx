@@ -2,6 +2,7 @@ import React from 'react';
 import { Link } from 'react-router-dom';
 import { Star, MapPin, Calendar, Clock } from 'lucide-react';
 import type { Tour } from '../../types';
+import SafeImage from '../common/SafeImage';
 
 interface TourCardProps {
   tour: Tour;
@@ -16,7 +17,7 @@ const TourCard: React.FC<TourCardProps> = ({ tour, variant = 'default' }) => {
   return (
     <div className={`bg-white rounded-2xl overflow-hidden shadow-sm hover:shadow-xl transition-all duration-300 group border border-gray-100 ${isFlashSale ? 'border-primary/20' : ''}`}>
       <div className="relative aspect-[4/3] overflow-hidden">
-        <img
+        <SafeImage
           src={tour.image}
           alt={tour.title}
           className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500"

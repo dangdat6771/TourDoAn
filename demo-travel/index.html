@@ -3,22 +3,26 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>28.TRAVEL Admin</title>
+    <title>28.TRAVEL</title>
     <script>
       // Prevent libraries from crashing when trying to overwrite window.fetch
-      (function() {
+      (function () {
         try {
           const originalFetch = window.fetch;
           if (originalFetch) {
-            Object.defineProperty(window, 'fetch', {
-              get: function() { return originalFetch; },
-              set: function() { console.warn('Attempted to overwrite window.fetch, ignored.'); },
+            Object.defineProperty(window, "fetch", {
+              get: function () {
+                return originalFetch;
+              },
+              set: function () {
+                console.warn("Attempted to overwrite window.fetch, ignored.");
+              },
               configurable: true,
-              enumerable: true
+              enumerable: true,
             });
           }
         } catch (e) {
-          console.error('Failed to define fetch setter:', e);
+          console.error("Failed to define fetch setter:", e);
         }
       })();
     </script>
@@ -28,4 +32,3 @@
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>
-

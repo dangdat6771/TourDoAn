@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { ChevronRight } from 'lucide-react';
 import type { News } from '../../types';
 import { fetchTravelNews } from '../../services/travelApi';
+import SafeImage from '../common/SafeImage';
 
 const NewsSection = () => {
   const [articles, setArticles] = useState<News[]>([]);
@@ -48,7 +49,7 @@ const NewsSection = () => {
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
           <div className="group">
             <Link to={mainNews.path} className="block overflow-hidden rounded-3xl relative aspect-video mb-6">
-              <img
+              <SafeImage
                 src={mainNews.image}
                 alt={mainNews.title}
                 className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
@@ -71,7 +72,7 @@ const NewsSection = () => {
             {sideNews.map((item) => (
               <div key={item.id} className="flex flex-col gap-3 group">
                 <Link to={item.path} className="block overflow-hidden rounded-2xl relative aspect-[4/3]">
-                  <img
+                  <SafeImage
                     src={item.image}
                     alt={item.title}
                     className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500"

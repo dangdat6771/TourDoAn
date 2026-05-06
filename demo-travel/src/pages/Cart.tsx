@@ -7,6 +7,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { createCheckoutOrder, getApiErrorMessage } from '../services/travelApi';
 import { useUserStore } from '../store/useUserStore';
+import SafeImage from '../components/common/SafeImage';
 
 const checkoutSchema = z.object({
   fullName: z.string().min(2, 'Ho ten phai it nhat 2 ky tu'),
@@ -14,10 +15,34 @@ const checkoutSchema = z.object({
   email: z.string().email('Email khong hop le'),
   address: z.string().min(5, 'Dia chi phai it nhat 5 ky tu'),
   paymentMethod: z.enum(['cash', 'momo', 'bank']),
+  paymentOption: z.enum(['full', 'deposit']),
   note: z.string().optional(),
 });
 
 type CheckoutFormData = z.infer<typeof checkoutSchema>;
+
+const DEPOSIT_RATE = 0.3;
+const MIN_DEPOSIT_LEAD_DAYS = 7;
+
+const parseDisplayedDate = (value?: string) => {
+  if (!value) {
+    return null;
+  }
+
+  const direct = new Date(value);
+  if (!Number.isNaN(direct.getTime())) {
+    return direct;
+  }
+
+  const match = value.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+  if (!match) {
+    return null;
+  }
+
+  const [, day, month, year] = match;
+  const parsed = new Date(Number(year), Number(month) - 1, Number(day));
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+};
 
 const Cart = () => {
   const navigate = useNavigate();
@@ -34,6 +59,8 @@ const Cart = () => {
     handleSubmit,
     getValues,
     reset,
+    setValue,
+    watch,
     formState: { errors },
   } = useForm<CheckoutFormData>({
     resolver: zodResolver(checkoutSchema),
@@ -43,9 +70,13 @@ const Cart = () => {
       email: '',
       address: '',
       paymentMethod: 'bank',
+      paymentOption: 'full',
       note: '',
     },
   });
+
+  const paymentOption = watch('paymentOption');
+  const paymentMethod = watch('paymentMethod');
 
   useEffect(() => {
     const currentValues = getValues();
@@ -57,6 +88,30 @@ const Cart = () => {
       address: user?.address || currentValues.address || '',
     });
   }, [getValues, reset, user]);
+
+  const earliestDepartureDate = items.reduce<Date | null>((earliest, item) => {
+    const departureDate = parseDisplayedDate(item.startDate);
+    if (!departureDate) {
+      return earliest;
+    }
+    if (!earliest || departureDate.getTime() < earliest.getTime()) {
+      return departureDate;
+    }
+    return earliest;
+  }, null);
+
+  const depositAmount = Math.round(totalPrice() * DEPOSIT_RATE);
+  const outstandingAfterDeposit = Math.max(totalPrice() - depositAmount, 0);
+  const depositLeadDays = earliestDepartureDate
+    ? Math.floor((earliestDepartureDate.getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24))
+    : null;
+  const canUseDeposit = depositLeadDays === null || depositLeadDays >= MIN_DEPOSIT_LEAD_DAYS;
+
+  useEffect(() => {
+    if (!canUseDeposit && paymentOption === 'deposit') {
+      setValue('paymentOption', 'full');
+    }
+  }, [canUseDeposit, paymentOption, setValue]);
 
   const onSubmit = async (data: CheckoutFormData) => {
     if (!isAuthenticated || !user) {
@@ -83,6 +138,7 @@ const Cart = () => {
             note: data.note,
           },
           paymentMethod: data.paymentMethod,
+          paymentOption: data.paymentOption,
           items: items.map((item) => {
             if (!item.selectedScheduleId) {
               throw new Error(`Tour ${item.title} chua co lich khoi hanh.`);
@@ -160,7 +216,7 @@ const Cart = () => {
               <div className="p-6 flex flex-col gap-6">
                 {items.map((item) => (
                   <div key={item.cartKey} className="flex flex-col sm:flex-row gap-6 pb-6 border-b border-gray-100 last:border-0 last:pb-0">
-                    <img src={item.image} alt={item.title} className="w-full sm:w-32 h-32 rounded-2xl object-cover" referrerPolicy="no-referrer" />
+                    <SafeImage src={item.image} alt={item.title} className="w-full sm:w-32 h-32 rounded-2xl object-cover" referrerPolicy="no-referrer" />
                     <div className="flex-1 flex flex-col gap-2">
                       <div className="flex justify-between items-start gap-4">
                         <h3 className="font-bold text-gray-900 leading-tight">{item.title}</h3>
@@ -272,6 +328,55 @@ const Cart = () => {
               </div>
             </div>
 
+            <div className="bg-white rounded-3xl shadow-sm border border-gray-100 overflow-hidden">
+              <div className="bg-primary p-4 text-white font-bold">Cach Thanh Toan</div>
+              <div className="p-6 flex flex-col gap-4">
+                <label className="rounded-2xl border border-gray-200 p-4 transition hover:border-primary/40 hover:bg-gray-50">
+                  <div className="flex items-start gap-3">
+                    <input type="radio" value="full" {...register('paymentOption')} className="mt-1 h-4 w-4 text-primary" />
+                    <div className="flex-1">
+                      <p className="text-sm font-bold text-gray-900">Thanh toan toan bo</p>
+                      <p className="mt-1 text-xs leading-5 text-gray-500">
+                        Thanh toan ngay {totalPrice().toLocaleString()}d de chot don hang tron ven.
+                      </p>
+                    </div>
+                  </div>
+                </label>
+
+                <label className={`rounded-2xl border p-4 transition ${canUseDeposit ? 'border-gray-200 hover:border-primary/40 hover:bg-gray-50' : 'border-amber-200 bg-amber-50 opacity-80'}`}>
+                  <div className="flex items-start gap-3">
+                    <input
+                      type="radio"
+                      value="deposit"
+                      {...register('paymentOption')}
+                      disabled={!canUseDeposit}
+                      className="mt-1 h-4 w-4 text-primary"
+                    />
+                    <div className="flex-1">
+                      <div className="flex items-center justify-between gap-3">
+                        <p className="text-sm font-bold text-gray-900">Dat coc 30%</p>
+                        <span className="rounded-full bg-secondary/10 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.15em] text-secondary">
+                          Tam tinh
+                        </span>
+                      </div>
+                      <p className="mt-1 text-xs leading-5 text-gray-500">
+                        Thanh toan truoc {depositAmount.toLocaleString()}d, con lai {outstandingAfterDeposit.toLocaleString()}d.
+                      </p>
+                      {canUseDeposit ? (
+                        <p className="mt-2 text-[11px] text-gray-400">
+                          He thong se xac nhan han thanh toan phan con lai theo ngay khoi hanh va chinh sach tour.
+                        </p>
+                      ) : (
+                        <p className="mt-2 text-[11px] text-amber-700">
+                          Lich khoi hanh dang qua gan, don nay se phai thanh toan toan bo. Dat coc chi ap dung khi con it nhat {MIN_DEPOSIT_LEAD_DAYS} ngay truoc khoi hanh.
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                </label>
+              </div>
+            </div>
+
             <div className="bg-white rounded-3xl shadow-xl border border-gray-100 overflow-hidden">
               <div className="p-8 flex flex-col gap-6">
                 {submissionError && <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-600">{submissionError}</div>}
@@ -285,6 +390,28 @@ const Cart = () => {
                     <span>Giam gia:</span>
                     <span className="font-bold text-green-500">-0d</span>
                   </div>
+                  <div className="flex justify-between text-gray-600">
+                    <span>PTTT:</span>
+                    <span className="font-bold text-gray-900 uppercase">{paymentMethod}</span>
+                  </div>
+                  <div className="flex justify-between text-gray-600">
+                    <span>Lua chon thanh toan:</span>
+                    <span className="font-bold text-gray-900">
+                      {paymentOption === 'deposit' ? 'Dat coc 30%' : 'Toan bo'}
+                    </span>
+                  </div>
+                  {paymentOption === 'deposit' && (
+                    <>
+                      <div className="flex justify-between text-gray-600">
+                        <span>Can thanh toan ngay:</span>
+                        <span className="font-bold text-secondary">{depositAmount.toLocaleString()}d</span>
+                      </div>
+                      <div className="flex justify-between text-gray-600">
+                        <span>Con lai sau dat coc:</span>
+                        <span className="font-bold text-gray-900">{outstandingAfterDeposit.toLocaleString()}d</span>
+                      </div>
+                    </>
+                  )}
                   <div className="pt-4 border-t flex justify-between items-end">
                     <span className="font-bold text-gray-900">Thanh tien:</span>
                     <span className="text-3xl font-black text-primary">{totalPrice().toLocaleString()}d</span>

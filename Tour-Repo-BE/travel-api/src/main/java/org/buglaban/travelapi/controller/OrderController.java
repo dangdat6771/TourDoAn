@@ -4,6 +4,10 @@ import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.buglaban.travelapi.dto.request.order.CreateOrderRequestDTO;
+import org.buglaban.travelapi.dto.request.order.OrderCancellationRequestDTO;
+import org.buglaban.travelapi.dto.request.order.OrderCheckInRequestDTO;
+import org.buglaban.travelapi.dto.request.order.OrderParticipationRequestDTO;
+import org.buglaban.travelapi.dto.request.order.OrderPaymentUpdateRequestDTO;
 import org.buglaban.travelapi.dto.response.ResponseData;
 import org.buglaban.travelapi.dto.response.ResponseFailure;
 import org.buglaban.travelapi.dto.response.order.OrderResponseDTO;
@@ -90,10 +94,11 @@ public class OrderController {
     @PutMapping("{id}/cancel")
     public ResponseData<?> cancelOrder(
             @PathVariable Long id,
+            @RequestBody(required = false) OrderCancellationRequestDTO requestDTO,
             @RequestHeader(value = "X-User-Id", required = false) Long userId,
             @RequestHeader(value = "X-User-Email", required = false) String email) {
         try {
-            orderService.cancelOrder(id, userId, email);
+            orderService.cancelOrder(id, userId, email, requestDTO != null ? requestDTO.getReason() : null);
             return new ResponseData<>(HttpStatus.OK.value(), "Hủy đơn hàng thành công");
         } catch (Exception e) {
             log.error("errorMessage = {}", e.getMessage(), e.getCause());
@@ -131,6 +136,46 @@ public class OrderController {
         } catch (Exception e) {
             log.error("errorMessage = {}", e.getMessage(), e.getCause());
             return new ResponseFailure(HttpStatus.BAD_REQUEST.value(), "Change payment status fail");
+        }
+    }
+
+    @PatchMapping("{id}/payment")
+    public ResponseData<?> recordPayment(@PathVariable Long id, @Valid @RequestBody OrderPaymentUpdateRequestDTO requestDTO) {
+        try {
+            orderService.recordPayment(id, requestDTO);
+            return new ResponseData<>(HttpStatus.OK.value(), "Payment recorded successfully");
+        } catch (Exception e) {
+            log.error("errorMessage = {}", e.getMessage(), e.getCause());
+            return new ResponseFailure(HttpStatus.BAD_REQUEST.value(), "Record payment fail");
+        }
+    }
+
+    @PatchMapping("{id}/participation")
+    public ResponseData<?> confirmParticipation(
+            @PathVariable Long id,
+            @RequestBody(required = false) OrderParticipationRequestDTO requestDTO,
+            @RequestHeader(value = "X-User-Id", required = false) Long userId,
+            @RequestHeader(value = "X-User-Email", required = false) String email) {
+        try {
+            orderService.confirmParticipation(id, userId, email, requestDTO);
+            return new ResponseData<>(HttpStatus.OK.value(), "Participation confirmed successfully");
+        } catch (Exception e) {
+            log.error("errorMessage = {}", e.getMessage(), e.getCause());
+            return new ResponseFailure(HttpStatus.BAD_REQUEST.value(), "Confirm participation fail");
+        }
+    }
+
+    @PatchMapping("{orderId}/items/{detailId}/check-in")
+    public ResponseData<?> updateCheckIn(
+            @PathVariable Long orderId,
+            @PathVariable Integer detailId,
+            @Valid @RequestBody OrderCheckInRequestDTO requestDTO) {
+        try {
+            orderService.updateCheckIn(orderId, detailId, requestDTO);
+            return new ResponseData<>(HttpStatus.OK.value(), "Check-in updated successfully");
+        } catch (Exception e) {
+            log.error("errorMessage = {}", e.getMessage(), e.getCause());
+            return new ResponseFailure(HttpStatus.BAD_REQUEST.value(), "Update check-in fail");
         }
     }
 }

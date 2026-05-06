@@ -3,6 +3,7 @@ import { Link, useParams } from 'react-router-dom';
 import { ChevronRight, Calendar, ArrowLeft } from 'lucide-react';
 import type { News } from '../types';
 import { fetchTravelNews } from '../services/travelApi';
+import SafeImage from '../components/common/SafeImage';
 
 const NewsDetailPage = () => {
   const { slug } = useParams();
@@ -62,7 +63,7 @@ const NewsDetailPage = () => {
 
         <article className="overflow-hidden rounded-3xl bg-white shadow-sm border border-gray-100">
           <div className="aspect-video overflow-hidden">
-            <img src={article.image} alt={article.title} className="h-full w-full object-cover" referrerPolicy="no-referrer" />
+            <SafeImage src={article.image} alt={article.title} className="h-full w-full object-cover" referrerPolicy="no-referrer" />
           </div>
           <div className="p-8 md:p-10">
             <div className="mb-4 flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-primary">

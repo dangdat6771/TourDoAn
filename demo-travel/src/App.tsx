@@ -1,4 +1,5 @@
 import { BrowserRouter as Router, Routes, Route, useLocation } from 'react-router-dom';
+import { useEffect } from 'react';
 import Header from './components/common/Header';
 import Footer from './components/common/Footer';
 import Home from './pages/Home';
@@ -18,10 +19,44 @@ import CategoryManagement from './admin/pages/CategoryManagement';
 import TourManagement from './admin/pages/TourManagement';
 import TourForm from './admin/pages/TourForm';
 import OrderManagement from './admin/pages/OrderManagement';
+import OrderCheckIn from './admin/pages/OrderCheckIn';
 import UserManagement from './admin/pages/UserManagement';
 import Settings from './admin/pages/Settings';
 import { AdminLayout } from './admin/layouts/AdminLayout';
 import { ProtectedRoute } from './admin/components/ProtectedRoute';
+import { buildCartOwnerKey, GUEST_CART_OWNER, useCartStore } from './store/useCartStore';
+import { useUserStore } from './store/useUserStore';
+
+const CartSessionSync = () => {
+  const currentOwnerKey = useCartStore((state) => state.currentOwnerKey);
+  const setCartOwner = useCartStore((state) => state.setCartOwner);
+  const switchToGuestCart = useCartStore((state) => state.switchToGuestCart);
+  const adoptGuestCart = useCartStore((state) => state.adoptGuestCart);
+  const isAuthenticated = useUserStore((state) => state.isAuthenticated);
+  const userId = useUserStore((state) => state.user?.id ?? null);
+
+  useEffect(() => {
+    const nextOwnerKey = isAuthenticated && userId ? buildCartOwnerKey(userId) : GUEST_CART_OWNER;
+
+    if (currentOwnerKey === nextOwnerKey) {
+      return;
+    }
+
+    if (currentOwnerKey === GUEST_CART_OWNER && nextOwnerKey !== GUEST_CART_OWNER) {
+      adoptGuestCart(nextOwnerKey);
+      return;
+    }
+
+    if (nextOwnerKey === GUEST_CART_OWNER) {
+      switchToGuestCart({ clearGuestCart: true });
+      return;
+    }
+
+    setCartOwner(nextOwnerKey);
+  }, [adoptGuestCart, currentOwnerKey, isAuthenticated, setCartOwner, switchToGuestCart, userId]);
+
+  return null;
+};
 
 const AppContent = () => {
   const location = useLocation();
@@ -38,6 +73,8 @@ const AppContent = () => {
         <Route path="/admin/tours/edit/:id" element={<ProtectedRoute><AdminLayout><TourForm /></AdminLayout></ProtectedRoute>} />
         <Route path="/admin/tours/trash" element={<ProtectedRoute><AdminLayout><TourManagement isTrash /></AdminLayout></ProtectedRoute>} />
         <Route path="/admin/orders" element={<ProtectedRoute><AdminLayout><OrderManagement /></AdminLayout></ProtectedRoute>} />
+        <Route path="/admin/orders/check-in" element={<ProtectedRoute><AdminLayout><OrderCheckIn /></AdminLayout></ProtectedRoute>} />
+        <Route path="/admin/orders/check-in/:id" element={<ProtectedRoute><AdminLayout><OrderCheckIn /></AdminLayout></ProtectedRoute>} />
         <Route path="/admin/users" element={<ProtectedRoute><AdminLayout><UserManagement /></AdminLayout></ProtectedRoute>} />
         <Route path="/admin/settings" element={<ProtectedRoute><AdminLayout><Settings /></AdminLayout></ProtectedRoute>} />
         {/* Add more admin routes as needed */}
@@ -47,6 +84,7 @@ const AppContent = () => {
 
   return (
     <div className="flex flex-col min-h-screen">
+      <CartSessionSync />
       <Header />
       <div className="flex-grow">
         <Routes>

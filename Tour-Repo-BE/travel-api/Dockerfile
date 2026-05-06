@@ -5,13 +5,8 @@
 # =============================================
 
 # Stage 1: Build
-FROM eclipse-temurin:17-jdk-jammy AS builder
+FROM maven:3.9.9-eclipse-temurin-17 AS builder
 WORKDIR /app
-
-# Install Maven directly (avoid mvnw line-ending issues on Windows)
-RUN apt-get update && \
-    apt-get install -y maven && \
-    apt-get clean && rm -rf /var/lib/apt/lists/*
 
 # Copy pom.xml first (for dependency caching)
 COPY pom.xml ./

@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { Calendar, ChevronRight } from 'lucide-react';
 import type { News } from '../types';
 import { fetchTravelNews } from '../services/travelApi';
+import SafeImage from '../components/common/SafeImage';
 
 const NewsPage = () => {
   const [articles, setArticles] = useState<News[]>([]);
@@ -57,7 +58,7 @@ const NewsPage = () => {
             {articles.map((article) => (
               <article key={article.id} className="overflow-hidden rounded-3xl bg-white shadow-sm border border-gray-100">
                 <Link to={article.path} className="block aspect-[4/3] overflow-hidden">
-                  <img src={article.image} alt={article.title} className="h-full w-full object-cover transition-transform duration-500 hover:scale-105" referrerPolicy="no-referrer" />
+                  <SafeImage src={article.image} alt={article.title} className="h-full w-full object-cover transition-transform duration-500 hover:scale-105" referrerPolicy="no-referrer" />
                 </Link>
                 <div className="p-6">
                   <div className="mb-3 flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-primary">

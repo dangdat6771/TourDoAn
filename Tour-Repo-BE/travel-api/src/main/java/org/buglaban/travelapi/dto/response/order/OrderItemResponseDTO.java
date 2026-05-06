@@ -5,9 +5,11 @@ import lombok.Builder;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
+import org.buglaban.travelapi.util.CheckInStatus;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 
 @Getter
 @Setter
@@ -28,4 +30,13 @@ public class OrderItemResponseDTO {
     private BigDecimal childPrice;
     private BigDecimal infantPrice;
     private BigDecimal subtotal;
+    private CheckInStatus checkInStatus;
+    private Integer checkedInAdultQuantity;
+    private Integer checkedInChildQuantity;
+    private Integer checkedInInfantQuantity;
+    private Integer noShowAdultQuantity;
+    private Integer noShowChildQuantity;
+    private Integer noShowInfantQuantity;
+    private LocalDateTime lastCheckInAt;
+    private String checkInNote;
 }

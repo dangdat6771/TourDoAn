@@ -9,6 +9,7 @@ import lombok.Builder;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
+import org.buglaban.travelapi.util.PaymentOption;
 
 import java.util.List;
 
@@ -28,4 +29,6 @@ public class CreateOrderRequestDTO {
 
     @NotBlank(message = "paymentMethod must not be blank")
     private String paymentMethod;
+
+    private PaymentOption paymentOption;
 }

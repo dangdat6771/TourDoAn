@@ -5,6 +5,7 @@ import {
   Layers,
   Map,
   ShoppingCart,
+  CheckCircle2,
   Users,
   Settings,
   LogOut,
@@ -23,6 +24,7 @@ const navigation = [
   { name: 'Quan ly tour', path: '/admin/tours', icon: Map },
   { name: 'Tao tour moi', path: '/admin/tours/create', icon: Plus },
   { name: 'Quan ly don hang', path: '/admin/orders', icon: ShoppingCart },
+  { name: 'Check-in tour', path: '/admin/orders/check-in', icon: CheckCircle2 },
   { name: 'Quan ly nguoi dung', path: '/admin/users', icon: Users },
   { name: 'Cai dat chung', path: '/admin/settings', icon: Settings },
 ];
@@ -54,7 +56,9 @@ const Sidebar = ({ isOpen, toggle }: { isOpen: boolean; toggle: () => void }) =>
 
         <nav className="flex-grow p-4 space-y-1 overflow-y-auto">
           {navigation.map((item) => {
-            const isActive = location.pathname === item.path;
+            const isActive =
+              location.pathname === item.path ||
+              (item.path === '/admin/orders/check-in' && location.pathname.startsWith('/admin/orders/check-in/'));
             return (
               <Link
                 key={item.name}
