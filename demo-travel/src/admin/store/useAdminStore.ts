@@ -15,7 +15,9 @@ export const useAdminStore = create<AdminState>()(
       user: null,
       isAuthenticated: false,
       login: (user) => {
-        localStorage.setItem('token', `session-${user.id}`);
+        if (user.token) {
+          localStorage.setItem('token', user.token);
+        }
         set({ user, isAuthenticated: true });
       },
       logout: () => {

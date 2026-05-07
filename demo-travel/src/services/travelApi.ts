@@ -135,6 +135,8 @@ type LoginResponseApi = {
   email: string;
   avatarUrl?: string;
   role?: string;
+  accessToken?: string;
+  tokenType?: string;
 };
 
 type PriceQuoteApi = {
@@ -406,6 +408,7 @@ export type UserSession = {
   avatar?: string;
   phone?: string;
   address?: string;
+  token?: string;
 };
 
 const buildCurrentUserHeaders = (user?: UserSession | null) =>
@@ -1130,22 +1133,33 @@ export const deleteAdminTour = async (id: string) => unwrap(apiClient.delete(`/a
 export const loginAdmin = async (email: string, password: string): Promise<AdminUser> => {
   const response = await unwrap<LoginResponseApi>(apiClient.post('/user/login', { email, password }));
   const role = normalizeText(response.role);
+  if (role !== 'admin' && role !== 'staff') {
+    throw new Error('Tai khoan khong co quyen truy cap khu vuc quan tri');
+  }
+  if (response.accessToken) {
+    localStorage.setItem('token', response.accessToken);
+  }
   return {
     id: String(response.id),
     name: response.fullName,
     email: response.email,
     role: role === 'admin' ? 'admin' : role === 'staff' ? 'staff' : 'user',
     avatar: response.avatarUrl,
+    token: response.accessToken,
   };
 };
 
 export const loginUser = async (email: string, password: string): Promise<UserSession> => {
   const response = await unwrap<LoginResponseApi>(apiClient.post('/user/login', { email, password }));
+  if (response.accessToken) {
+    localStorage.setItem('token', response.accessToken);
+  }
   return {
     id: String(response.id),
     name: response.fullName,
     email: response.email,
     avatar: response.avatarUrl,
+    token: response.accessToken,
   };
 };
 
