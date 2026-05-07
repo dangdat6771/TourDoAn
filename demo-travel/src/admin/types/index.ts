@@ -4,6 +4,7 @@ export interface AdminUser {
   email: string;
   role: 'admin' | 'staff' | 'user';
   avatar?: string;
+  token?: string;
 }
 
 export interface DashboardStats {

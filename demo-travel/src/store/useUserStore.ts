@@ -18,17 +18,23 @@ export const useUserStore = create<UserState>()(
       user: null,
       isAuthenticated: false,
       redirectAfterLogin: null,
-      login: (user) =>
+      login: (user) => {
+        if (user.token) {
+          localStorage.setItem('token', user.token);
+        }
         set({
           user,
           isAuthenticated: true,
-        }),
-      logout: () =>
+        });
+      },
+      logout: () => {
+        localStorage.removeItem('token');
         set({
           user: null,
           isAuthenticated: false,
           redirectAfterLogin: null,
-        }),
+        });
+      },
       setRedirectAfterLogin: (path) =>
         set({
           redirectAfterLogin: path,

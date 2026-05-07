@@ -13,14 +13,14 @@ import org.buglaban.travelapi.model.Role;
 import org.buglaban.travelapi.model.User;
 import org.buglaban.travelapi.repository.IRoleRepository;
 import org.buglaban.travelapi.repository.IUserRepository;
+import org.buglaban.travelapi.security.JwtService;
 import org.buglaban.travelapi.service.IUserService;
 import org.buglaban.travelapi.util.UserStatus;
 import org.buglaban.travelapi.util.UserType;
-//import org.springframework.security.crypto.password.PasswordEncoder;
 import org.modelmapper.ModelMapper;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
-//import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
@@ -32,7 +32,8 @@ public class UserService implements IUserService {
     private final IUserRepository iUserRepository;
     private final IRoleRepository iRoleRepository;
     private final ModelMapper mapper;
-//    private final PasswordEncoder passwordEncoder;
+    private final PasswordEncoder passwordEncoder;
+    private final JwtService jwtService;
 
     @Override
     public long userRegister(RegisterRequestDTO requestDTO) {
@@ -43,8 +44,7 @@ public class UserService implements IUserService {
         User user = User.builder()
                 .fullName(requestDTO.getFullName())
                 .email(requestDTO.getEmail())
-//                .passwordHash(passwordEncoder.encode(requestDTO.getPasswordHash()))
-                .passwordHash(requestDTO.getPasswordHash())
+                .passwordHash(passwordEncoder.encode(requestDTO.getPasswordHash()))
                 .status(UserStatus.ACTIVE)
                 .emailVerified(false)
                 .role(userRole)
@@ -61,7 +61,7 @@ public class UserService implements IUserService {
         }
 
         User user = optionalUser.get();
-        if (!user.getPasswordHash().equals(requestDTO.getPassword())) {
+        if (!passwordMatches(requestDTO.getPassword(), user.getPasswordHash())) {
             throw new DataNotFoundException("Wrong email number or password");
         }
 
@@ -71,6 +71,8 @@ public class UserService implements IUserService {
                 .email(user.getEmail())
                 .avatarUrl(user.getAvatarUrl())
                 .role(user.getRole() != null ? user.getRole().getRoleName().name() : null)
+                .accessToken(jwtService.generateToken(user))
+                .tokenType("Bearer")
                 .build();
     }
 
@@ -134,11 +136,21 @@ public class UserService implements IUserService {
         if (user.isEmpty()) {
             throw new DataNotFoundException("Data not found");
         }
-        if (user.get().getPasswordHash().equals(changePasswordRequest.getOldPassword())) {
+        if (passwordMatches(changePasswordRequest.getOldPassword(), user.get().getPasswordHash())) {
             User us = user.get();
-            us.setPasswordHash(changePasswordRequest.getNewPassword());
+            us.setPasswordHash(passwordEncoder.encode(changePasswordRequest.getNewPassword()));
             iUserRepository.save(us);
         }
+    }
+
+    private boolean passwordMatches(String rawPassword, String storedPassword) {
+        if (storedPassword == null) {
+            return false;
+        }
+        if (storedPassword.startsWith("$2a$") || storedPassword.startsWith("$2b$") || storedPassword.startsWith("$2y$")) {
+            return passwordEncoder.matches(rawPassword, storedPassword);
+        }
+        return storedPassword.equals(rawPassword);
     }
 
     private UserDetailResponseDTO toUserDetailResponse(User user) {
